@@ -1,0 +1,14 @@
+node_modules
+dist
+dist-ssr
+*.local
+.DS_Store
+.eslintcache
+
+# Generated data. The importer regenerates public/data/ from the harness
+# runs/ artifacts; a committed sample lives under public/data/sample/ only.
+public/data/index.json
+public/data/runs/
+public/data/models/
+public/data/suites/
+public/data/comparisons/
