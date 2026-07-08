@@ -7,9 +7,11 @@
   "scripts": {
     "import": "tsx scripts/import-runs.ts",
     "import:watch": "tsx scripts/watch-runs.ts",
+    "publish": "tsx scripts/publish.ts",
     "dev": "vite",
     "dev:live": "concurrently -k -n import,web -c cyan,magenta \"npm:import:watch\" \"npm:dev\"",
     "build": "tsc -b && vite build",
+    "postbuild": "cp dist/index.html dist/404.html",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "lint": "eslint . --max-warnings 0"

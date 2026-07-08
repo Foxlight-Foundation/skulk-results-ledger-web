@@ -58,6 +58,33 @@ For a subpath deploy (e.g. GitHub Pages under `/ledger/`), set `DEPLOY_BASE`:
 DEPLOY_BASE=/ledger/ npm run build
 ```
 
+## Publishing (durable store + deploy)
+
+The published site does not read a local `runs/` directory. The permanent record
+lives in the private **`Foxlight-Foundation/skulk-results-data`** repo as
+slimmed `reports/<run_id>.json` files (metrics + fingerprint; prompt/output text
+stripped). This decouples the record from any laptop and lets local `runs/` be
+deleted freely.
+
+**Publish new runs** (from any harness box, into a checkout of the data repo):
+
+```bash
+npm run publish -- --data ../skulk-results-data --push
+#    --runs <dir>   source runs (default ../skulk-test-harness/runs)
+#    --push         commit + push to the data repo
+#    --prune        delete the local run dirs after publishing
+```
+
+**Deploy** is a GitHub Action (`.github/workflows/deploy.yml`): on push to
+`main` (and every 6h, to pick up newly published runs), it checks out the data
+repo, imports with `--redact`, builds with `DEPLOY_BASE=/benchmarks/`, and
+publishes to GitHub Pages. A `404.html` fallback (created by `postbuild`) makes
+deep links work on Pages.
+
+One-time setup (see `DEPLOY.md`): make this repo's Pages source "GitHub Actions",
+add a `DATA_REPO_TOKEN` secret with read access to `skulk-results-data`, and set
+the repo/plan so Pages can serve it.
+
 ## Data contract
 
 `src/data/schema.ts` is the single source of truth for the generated-data

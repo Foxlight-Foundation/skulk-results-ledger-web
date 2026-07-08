@@ -1,0 +1,54 @@
+# Deploying the ledger to GitHub Pages
+
+The data lifecycle end to end:
+
+```
+harness run  ->  runs/<id>/report.json          (ephemeral, local, heavy)
+     |  npm run publish -- --data ../skulk-results-data --push
+     v
+skulk-results-data (private)  reports/<run_id>.json   (permanent record, slimmed)
+     |  GitHub Action: import --redact  ->  vite build (base=/benchmarks/)
+     v
+GitHub Pages /benchmarks                              (public, static)
+```
+
+Publishing is what lets you prune local disk: once a run is in
+`skulk-results-data`, delete its local `runs/<id>` (or publish with `--prune`).
+
+## One-time setup
+
+These steps need repo/org settings and a secret, so they are done by a human
+once. Nothing here has to be repeated per run.
+
+1. **Repo visibility / plan.** GitHub Pages serves free from a *public* repo.
+   Either make `skulk-results-ledger-web` public (it holds only app code, no
+   data and no secrets), or ensure the org plan allows Pages on private repos.
+
+2. **Enable Pages from Actions.** Repo → Settings → Pages → Build and
+   deployment → Source: **GitHub Actions**.
+
+3. **Grant the build read access to the private data repo.** Create a
+   fine-grained PAT (or a read-only deploy key) with **read** access to
+   `Foxlight-Foundation/skulk-results-data`, and add it to
+   `skulk-results-ledger-web` → Settings → Secrets and variables → Actions as
+   **`DATA_REPO_TOKEN`**. Until this exists the deploy still succeeds, just with
+   an empty ledger (the checkout step is skipped).
+
+4. **Confirm the base path.** The workflow sets `DEPLOY_BASE=/benchmarks/`. If
+   Pages serves the site at the default project path instead
+   (`<org>.github.io/skulk-results-ledger-web/`), change that env to
+   `/skulk-results-ledger-web/`, or point a custom domain at `/benchmarks`.
+
+## Behind a reverse proxy (cloudflared) instead
+
+The build is host-agnostic. To serve it from a box behind a Cloudflare tunnel:
+
+```bash
+npm run import -- --runs ../skulk-results-data/reports --redact
+DEPLOY_BASE=/ npm run build          # or /benchmarks/ if proxied at a subpath
+npx serve dist                       # any static server
+cloudflared tunnel run <name>        # -> benchmarks.foxlight.ai
+```
+
+The `404.html` fallback is emitted for Pages; for nginx use
+`try_files $uri /index.html;` so client-side routes resolve.

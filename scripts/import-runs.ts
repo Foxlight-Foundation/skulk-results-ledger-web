@@ -428,17 +428,28 @@ function toRollup(h: ModelHistory): ModelRollup {
 
 // ---- IO --------------------------------------------------------------------
 
-function findReportDirs(runsDir: string): string[] {
-  if (!existsSync(runsDir)) return [];
-  return readdirSync(runsDir, { withFileTypes: true })
-    .filter((d) => d.isDirectory())
-    .map((d) => join(runsDir, d.name))
-    .filter((p) => existsSync(join(p, 'report.json')));
+/**
+ * Collect report-file paths from a source directory, supporting both layouts:
+ * the harness's local `runs/<id>/report.json` subdirectories, and the durable
+ * store's flat `reports/<run_id>.json` files. Either can be passed to --runs.
+ */
+export function collectReportFiles(sourceDir: string): string[] {
+  if (!existsSync(sourceDir)) return [];
+  const files: string[] = [];
+  for (const entry of readdirSync(sourceDir, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      const nested = join(sourceDir, entry.name, 'report.json');
+      if (existsSync(nested)) files.push(nested);
+    } else if (entry.isFile() && entry.name.endsWith('.json')) {
+      files.push(join(sourceDir, entry.name));
+    }
+  }
+  return files;
 }
 
-function loadReport(dir: string): RawReport | null {
+function loadReportFile(file: string): RawReport | null {
   try {
-    const raw = JSON.parse(readFileSync(join(dir, 'report.json'), 'utf8')) as RawReport;
+    const raw = JSON.parse(readFileSync(file, 'utf8')) as RawReport;
     if (raw.suite != null || raw.results == null) return null; // skip stability reports
     return raw;
   } catch {
@@ -478,10 +489,15 @@ export function parseArgs(argv: string[]): ImportOptions {
 export function runImport({ runs, out, redact }: ImportOptions): string {
 
   const details: RunDetail[] = [];
+  const seen = new Set<string>();
   for (const runsDir of runs) {
-    for (const dir of findReportDirs(runsDir)) {
-      const report = loadReport(dir);
-      if (report) details.push(buildRunDetail(report, redact));
+    for (const file of collectReportFiles(runsDir)) {
+      const report = loadReportFile(file);
+      if (!report) continue;
+      // De-dup by run_id: the same run may exist both locally and in the store.
+      if (seen.has(report.run_id)) continue;
+      seen.add(report.run_id);
+      details.push(buildRunDetail(report, redact));
     }
   }
   details.sort((a, b) => (b.startedAt ?? '').localeCompare(a.startedAt ?? ''));

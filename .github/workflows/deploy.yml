@@ -1,0 +1,82 @@
+name: Deploy ledger to GitHub Pages
+
+# Builds the static ledger from the durable results store and publishes it to
+# GitHub Pages under /benchmarks. Runs on push to main and can be triggered
+# manually; also runs on a schedule so newly published runs surface without a
+# code change.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  # Rebuild a few times a day to pick up runs published to the data store.
+  schedule:
+    - cron: '0 */6 * * *'
+
+# The published subpath. Change this if Pages serves the site elsewhere (for a
+# default project site it would be /<repo-name>/).
+env:
+  DEPLOY_BASE: /benchmarks/
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never run two deploys at once; let a newer one supersede an in-flight one.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      # Surface the secret as an env var so it can be tested in a step `if`
+      # (referencing `secrets` directly in `if` is unreliable).
+      DATA_REPO_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+    steps:
+      - name: Checkout site
+        uses: actions/checkout@v4
+
+      # The private results store. If DATA_REPO_TOKEN is not set yet, this is
+      # skipped and the build produces a valid (empty) ledger rather than failing.
+      - name: Checkout results store
+        if: ${{ env.DATA_REPO_TOKEN != '' }}
+        uses: actions/checkout@v4
+        with:
+          repository: Foxlight-Foundation/skulk-results-data
+          token: ${{ env.DATA_REPO_TOKEN }}
+          path: results-data
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Generate the public data from the store, redacting operator-identifying
+      # fields. --runs points at the store's flat reports/ layout; a missing
+      # directory yields an empty index, not an error.
+      - name: Import + redact
+        run: npm run import -- --runs results-data/reports --redact
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
