@@ -14,4 +14,10 @@ export default defineConfig({
   },
   // Base is overridable for GitHub Pages / subpath deploys via DEPLOY_BASE.
   base: process.env.DEPLOY_BASE ?? '/',
+  server: {
+    host: true, // bind 0.0.0.0 so the dev server is reachable over Tailscale
+    // Vite blocks requests whose Host header is a non-localhost domain; allow
+    // the tailnet MagicDNS suffix so a `*.ts.net` name resolves.
+    allowedHosts: ['.ts.net'],
+  },
 });

@@ -49,11 +49,10 @@ export function MethodologyPage() {
   return (
     <Page>
       <Eyebrow>How to read this</Eyebrow>
-      <Title>A ledger, not a leaderboard.</Title>
+      <Title>Methodology</Title>
       <Lead>
-        These numbers come from the Skulk test harness running real chat, code, and tool workloads
-        against real hardware. Nothing here is a synthetic benchmark or a marketing figure. Every
-        run, including the disappointing ones, is kept.
+        These numbers come from the Skulk test harness running chat, code, and tool workloads
+        against real hardware. All runs included.
       </Lead>
 
       <H2>How throughput is computed</H2>
@@ -70,17 +69,15 @@ export function MethodologyPage() {
         number as an estimate. We never silently mix the two.
       </P>
       <P>
-        We also apply a physical-plausibility ceiling. A four-digit tokens-per-second figure comes
-        from a near-zero elapsed time, a cache hit or the clock-resolution floor, not real
-        generation, so those points are excluded from every headline number and shown dimmed in the
-        history rather than deleted.
+        We also apply a physical-plausibility ceiling. Implausible tokens-per-second, invalid text
+        generation, etc. are excluded from headline numbers and are shown dimmed in the history
+        rather than deleted.
       </P>
 
       <H2>Why comparisons carry warnings</H2>
       <P>
         A faster number on a different node set, a warmer cache, or a newer Skulk version is not a
-        real speedup. The compare view surfaces those differences as guards instead of hiding them,
-        because a delta without its conditions is not evidence.
+        real speedup. The compare view surfaces those differences as guards instead of hiding them.
       </P>
 
       <H2>The caveat vocabulary</H2>

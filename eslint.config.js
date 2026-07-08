@@ -16,6 +16,9 @@ const nodeGlobals = {
   process: 'readonly',
   console: 'readonly',
   URL: 'readonly',
+  setTimeout: 'readonly',
+  clearTimeout: 'readonly',
+  NodeJS: 'readonly',
 };
 
 const tsRules = {

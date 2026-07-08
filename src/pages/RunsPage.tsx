@@ -137,8 +137,8 @@ export function RunsPage() {
       <Eyebrow>Audit trail</Eyebrow>
       <Title>Every run</Title>
       <Sub>
-        Reverse-chronological, unfiltered. Failed, partial, and issue-marked runs are here too, by
-        design. {data.runCount} runs recorded.
+        Reverse-chronological, unfiltered; Failed, partial, and issue-marked runs included.{' '}
+        {data.runCount} runs in the current data set.
       </Sub>
       <Search placeholder="Filter by run id, suite, or model set…" value={query} onChange={(e) => setQuery(e.target.value)} />
       <SortableTable

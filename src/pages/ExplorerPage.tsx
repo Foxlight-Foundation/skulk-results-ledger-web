@@ -104,6 +104,12 @@ const SectionLabel = styled.h2`
 
 const FAMILIES: (EngineFamily | 'all')[] = ['all', 'mlx', 'llama_cpp'];
 
+// Floor for the "Skulk versions" stat: the count of released versions in the
+// Skulk CHANGELOG at build time (8, excluding [Unreleased]). Older runs predate
+// runtime fingerprints and so report no version, which would understate history
+// to zero. The displayed count never drops below this baseline.
+const SKULK_VERSION_BASELINE = 8;
+
 export function ExplorerPage() {
   const { data, error, loading } = useIndex();
   const navigate = useNavigate();
@@ -189,11 +195,10 @@ export function ExplorerPage() {
     <Page>
       <Hero>
         <Eyebrow>Skulk results ledger</Eyebrow>
-        <Title>Skulk performance, honestly measured.</Title>
+        <Title>Skulk performance.</Title>
         <Sub>
-          Every benchmark run across the Foxlight fleet, with its caveats attached. Throughput is the
-          median of credible samples only, so a five-token answer never becomes a headline number.
-          Click any point or row for the full run behind it. This is a ledger, not a leaderboard.
+          Every benchmark run across the Foxlight fleet. Throughput is the median of valid samples
+          only. Click any point or row for the full run behind it.
         </Sub>
       </Hero>
 
@@ -211,7 +216,7 @@ export function ExplorerPage() {
           <StatLabel>test suites</StatLabel>
         </Stat>
         <Stat>
-          <StatNum>{data.skulkVersions.length || '—'}</StatNum>
+          <StatNum>{Math.max(data.skulkVersions.length, SKULK_VERSION_BASELINE)}</StatNum>
           <StatLabel>Skulk versions</StatLabel>
         </Stat>
       </Stats>

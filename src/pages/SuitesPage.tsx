@@ -48,7 +48,7 @@ export function SuitesPage() {
       <Title>Test suites</Title>
       <Sub>
         Each suite is a named battery of assertions run against a set of models. Pass rate is across
-        every result the suite has ever recorded, not a cherry-picked best.
+        every result the suite has ever recorded.
       </Sub>
       <Grid $min="300px">
         {data.suites.map((s) => (

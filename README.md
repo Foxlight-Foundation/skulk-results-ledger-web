@@ -29,18 +29,28 @@ Starlight cyan), ported in `src/theme/`.
 ```bash
 npm install
 
-# 1. Generate data from harness runs (defaults to ../skulk-test-harness/runs)
-npm run import
+# Live mode: regenerate data on every harness run + serve with hot reload.
+# The watcher sees each new report.json and re-imports automatically, so the
+# site is never stale. This is the usual way to run it.
+npm run dev:live
+
+# Or the two halves separately:
+npm run import        # one-shot generate data from ../skulk-test-harness/runs
+npm run import:watch  # regenerate whenever a run appears/changes
+npm run dev           # dev server against whatever data is on disk
+
+# Importer flags (import / import:watch):
 #    --runs <dir>   add a runs directory (repeatable)
 #    --out  <dir>   output dir (default public/data)
 #    --redact       strip operator-identifying fields for public publishing
 
-# 2. Run the dev server
-npm run dev
-
 # Production build (static, deployable)
 npm run build && npm run preview
 ```
+
+The site is **static** in how it is *served* (no server, no database, deploy
+`dist/` anywhere), but the data is *not frozen*: `import:watch` keeps
+`public/data/` in step with the harness as runs land.
 
 For a subpath deploy (e.g. GitHub Pages under `/ledger/`), set `DEPLOY_BASE`:
 

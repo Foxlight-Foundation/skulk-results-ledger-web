@@ -6,7 +6,9 @@
   "description": "Honest results ledger for Skulk harness runs. Static React site over generated run artifacts; no backend.",
   "scripts": {
     "import": "tsx scripts/import-runs.ts",
+    "import:watch": "tsx scripts/watch-runs.ts",
     "dev": "vite",
+    "dev:live": "concurrently -k -n import,web -c cyan,magenta \"npm:import:watch\" \"npm:dev\"",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
@@ -26,6 +28,7 @@
     "@typescript-eslint/eslint-plugin": "^8.18.0",
     "@typescript-eslint/parser": "^8.18.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.0",
     "eslint": "^9.17.0",
     "eslint-plugin-react-hooks": "^5.1.0",
     "tsx": "^4.19.2",

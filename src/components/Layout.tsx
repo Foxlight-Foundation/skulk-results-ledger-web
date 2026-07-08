@@ -105,10 +105,8 @@ export function Layout() {
         <Outlet />
       </Main>
       <Footer>
-        An honest results ledger for the Skulk distributed-inference fabric. Every number links to
-        its raw run. Not a leaderboard.
-        <br />
-        Foxlight Foundation · measurements from the private Foxlight fleet.
+        A results ledger for the Skulk distributed-inference fabric. Every number links to its raw
+        run. Foxlight Foundation · measurements from the private Foxlight fleet.
       </Footer>
     </Shell>
   );

@@ -18,7 +18,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import type {
   CacheClass,
@@ -451,7 +451,13 @@ function writeJson(path: string, data: unknown): void {
   writeFileSync(path, JSON.stringify(data));
 }
 
-function parseArgs(argv: string[]): { runs: string[]; out: string; redact: boolean } {
+export interface ImportOptions {
+  runs: string[];
+  out: string;
+  redact: boolean;
+}
+
+export function parseArgs(argv: string[]): ImportOptions {
   const runs: string[] = [];
   let out = resolve(REPO, 'public/data');
   let redact = false;
@@ -464,8 +470,12 @@ function parseArgs(argv: string[]): { runs: string[]; out: string; redact: boole
   return { runs, out, redact };
 }
 
-function main(): void {
-  const { runs, out, redact } = parseArgs(process.argv.slice(2));
+/**
+ * Regenerate the full `public/data/` tree from the given runs directories.
+ * Pure with respect to inputs (aside from writing the output tree), so the
+ * watcher can call it repeatedly. Returns a one-line summary.
+ */
+export function runImport({ runs, out, redact }: ImportOptions): string {
 
   const details: RunDetail[] = [];
   for (const runsDir of runs) {
@@ -504,10 +514,14 @@ function main(): void {
   for (const detail of details) writeJson(join(out, 'runs', `${detail.runId}.json`), detail);
   for (const history of histories) writeJson(join(out, 'models', `${history.slug}.json`), history);
 
-  process.stdout.write(
+  return (
     `Imported ${details.length} run(s), ${histories.length} model(s), ${suites.length} suite(s)` +
-      `${redact ? ' [redacted]' : ''} -> ${out}\n`,
+    `${redact ? ' [redacted]' : ''} -> ${out}`
   );
 }
 
-main();
+// Run directly (`tsx scripts/import-runs.ts ...`) but stay importable by the
+// watcher without triggering a build.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  process.stdout.write(runImport(parseArgs(process.argv.slice(2))) + '\n');
+}
