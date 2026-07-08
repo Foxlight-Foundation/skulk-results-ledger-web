@@ -12,3 +12,6 @@ public/data/runs/
 public/data/models/
 public/data/suites/
 public/data/comparisons/
+
+# TS incremental build info
+*.tsbuildinfo
