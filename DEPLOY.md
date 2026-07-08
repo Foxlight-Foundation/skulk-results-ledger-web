@@ -27,12 +27,13 @@ once. Nothing here has to be repeated per run.
 2. **Enable Pages from Actions.** Repo → Settings → Pages → Build and
    deployment → Source: **GitHub Actions**.
 
-3. **Grant the build read access to the private data repo.** Create a
-   fine-grained PAT (or a read-only deploy key) with **read** access to
-   `Foxlight-Foundation/skulk-results-data`, and add it to
+3. **Grant the build read access to the private data repo.** Deploy keys are
+   disabled org-wide, so use a token: create a fine-grained PAT with
+   **Contents: read** on `Foxlight-Foundation/skulk-results-data`, and add it to
    `skulk-results-ledger-web` → Settings → Secrets and variables → Actions as
-   **`DATA_REPO_TOKEN`**. Until this exists the deploy still succeeds, just with
-   an empty ledger (the checkout step is skipped).
+   **`DATA_REPO_TOKEN`**. Until this exists the build still runs (validating CI)
+   but the **deploy job is gated off**, so no empty page is published. The first
+   public deploy happens automatically on the next run once the token is set.
 
 4. **Confirm the base path.** The workflow sets `DEPLOY_BASE=/benchmarks/`. If
    Pages serves the site at the default project path instead

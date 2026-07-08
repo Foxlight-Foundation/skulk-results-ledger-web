@@ -12,10 +12,11 @@ on:
   schedule:
     - cron: '0 */6 * * *'
 
-# The published subpath. Change this if Pages serves the site elsewhere (for a
-# default project site it would be /<repo-name>/).
+# The published subpath. Defaults to the GitHub Pages project path so the site
+# works at <org>.github.io/<repo>/ out of the box. For a custom /benchmarks URL
+# (custom domain or reverse proxy), set this to /benchmarks/.
 env:
-  DEPLOY_BASE: /benchmarks/
+  DEPLOY_BASE: /skulk-results-ledger-web/
 
 permissions:
   contents: read
@@ -30,17 +31,23 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    outputs:
+      has_data: ${{ steps.store.outcome == 'success' }}
     env:
       # Surface the secret as an env var so it can be tested in a step `if`
-      # (referencing `secrets` directly in `if` is unreliable).
+      # (referencing `secrets` directly in `if` is unreliable). A fine-grained
+      # PAT (or classic token) with read access to skulk-results-data. Deploy
+      # keys are disabled org-wide, so this is a token rather than an SSH key.
       DATA_REPO_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
     steps:
       - name: Checkout site
         uses: actions/checkout@v4
 
-      # The private results store. If DATA_REPO_TOKEN is not set yet, this is
-      # skipped and the build produces a valid (empty) ledger rather than failing.
+      # The private results store. If the token is not set yet, this is skipped;
+      # the build still runs (validating CI) but the deploy job is gated off, so
+      # no empty page is published until real data is available.
       - name: Checkout results store
+        id: store
         if: ${{ env.DATA_REPO_TOKEN != '' }}
         uses: actions/checkout@v4
         with:
@@ -72,6 +79,9 @@ jobs:
 
   deploy:
     needs: build
+    # Only publish once real data is available (the store token is set). This
+    # keeps an empty ledger from going public before the data source is wired.
+    if: ${{ needs.build.outputs.has_data == 'true' }}
     runs-on: ubuntu-latest
     environment:
       name: github-pages
