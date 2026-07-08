@@ -16,7 +16,7 @@ on:
 # works at <org>.github.io/<repo>/ out of the box. For a custom /benchmarks URL
 # (custom domain or reverse proxy), set this to /benchmarks/.
 env:
-  DEPLOY_BASE: /benchmarks/
+  DEPLOY_BASE: /skulk-results-ledger-web/
 
 permissions:
   contents: read
