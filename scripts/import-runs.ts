@@ -181,15 +181,21 @@ function displayName(modelId: string): string {
 
 function familyOf(modelId: string, nodes: NodeInfo[]): EngineFamily {
   const lower = modelId.toLowerCase();
-  // Artifact type is the strongest signal: GGUF runs on the llama.cpp family
-  // (served vs in-process is not observable from the report).
+  // Artifact type is MODEL truth and the deterministic signal, so it must decide
+  // BEFORE any accelerator-vendor heuristic. A GGUF only runs on the llama.cpp
+  // family; an mlx-community / bit-quant safetensors only runs on MLX. (GGUF is
+  // checked first so a GGUF whose id also carries a bit suffix stays llama.cpp.)
   if (lower.includes('gguf')) return 'llama_cpp';
-  // Any AMD accelerator in the run set implies a llama.cpp-family engine.
-  if (nodes.some((n) => n.acceleratorVendor === 'amd')) return 'llama_cpp';
-  if (nodes.some((n) => n.acceleratorVendor === 'apple')) return 'mlx';
-  // Fall back to naming conventions for runs that predate fingerprints: the
-  // mlx-community org and bit-quant suffixes are MLX safetensors artifacts.
   if (lower.startsWith('mlx-community/') || /-\d+bits?\b/.test(lower)) return 'mlx';
+  // The id does not reveal the artifact (e.g. a bare-org embedding model). Fall
+  // back to accelerator vendor, but ONLY when the cluster is homogeneous. On a
+  // heterogeneous fleet (Apple + AMD nodes both present, the normal e2e case)
+  // "an AMD node merely exists" must never override an Apple-served run -- that
+  // bug labelled every run llama.cpp and erased MLX from the ledger.
+  const hasAmd = nodes.some((n) => n.acceleratorVendor === 'amd');
+  const hasApple = nodes.some((n) => n.acceleratorVendor === 'apple');
+  if (hasAmd && !hasApple) return 'llama_cpp';
+  if (hasApple && !hasAmd) return 'mlx';
   return 'unknown';
 }
 
