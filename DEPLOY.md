@@ -3,17 +3,38 @@
 The data lifecycle end to end:
 
 ```
-harness run  ->  runs/<id>/report.json          (ephemeral, local, heavy)
-     |  npm run publish -- --data ../skulk-results-data --push
+harness battery  ->  runs/<id>/report.json          (ephemeral, local, heavy)
+     |  publish_results.sh at battery end  (auto: push + prune + deploy)
+     |  or manual: npm run publish -- --data ../skulk-results-data --push --prune
      v
 skulk-results-data (private)  reports/<run_id>.json   (permanent record, slimmed)
-     |  GitHub Action: import --redact  ->  vite build (base=/benchmarks/)
+     |  GitHub Action: import --redact  ->  vite build
      v
-GitHub Pages /benchmarks                              (public, static)
+GitHub Pages                                          (public, static)
 ```
 
 Publishing is what lets you prune local disk: once a run is in
 `skulk-results-data`, delete its local `runs/<id>` (or publish with `--prune`).
+
+## Automatic publishing (the normal path)
+
+Each e2e / mtp / throughput battery calls
+`skulk-test-harness/examples/foxlight/publish_results.sh` at the end. It slims and
+pushes the new runs to `skulk-results-data`, triggers an immediate Pages rebuild
+(only when something was actually pushed), and prunes the published local run dirs
+so disk does not grow without bound. It never fails the battery and skips
+stability-suite / failed / no-result runs.
+
+It is **off unless enabled**, by either:
+
+- a `.autopublish-results` marker file at the harness repo root (gitignored;
+  the "this is my publishing machine" switch, created once), **or**
+- `SKULK_PUBLISH_RESULTS=1` in the environment.
+
+Repo paths default to the sibling `skulk-results-data` / `skulk-results-ledger-web`
+checkouts; override with `SKULK_RESULTS_DATA_DIR` / `SKULK_RESULTS_WEB_DIR`. The
+immediate deploy needs an authenticated `gh`; without it, the site's 6-hourly
+schedule still picks the runs up. So the ledger stays fresh with no manual step.
 
 ## One-time setup
 
