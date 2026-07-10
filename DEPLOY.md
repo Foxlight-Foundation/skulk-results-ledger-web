@@ -10,7 +10,7 @@ harness battery  ->  runs/<id>/report.json          (ephemeral, local, heavy)
 skulk-results-data (private)  reports/<run_id>.json   (permanent record, slimmed)
      |  GitHub Action: import --redact  ->  vite build
      v
-GitHub Pages                                          (public, static)
+Cloudflare Pages  https://benchmarks.foxlight.ai      (public, static)
 ```
 
 Publishing is what lets you prune local disk: once a run is in
@@ -41,25 +41,28 @@ schedule still picks the runs up. So the ledger stays fresh with no manual step.
 These steps need repo/org settings and a secret, so they are done by a human
 once. Nothing here has to be repeated per run.
 
-1. **Repo visibility / plan.** GitHub Pages serves free from a *public* repo.
-   Either make `skulk-results-ledger-web` public (it holds only app code, no
-   data and no secrets), or ensure the org plan allows Pages on private repos.
+Since 2026-07-10 the site deploys to **Cloudflare Pages** at
+**https://benchmarks.foxlight.ai** (project `skulk-benchmarks`; the old
+`foxlight-foundation.github.io/skulk-results-ledger-web` URL serves a
+redirect).
 
-2. **Enable Pages from Actions.** Repo → Settings → Pages → Build and
-   deployment → Source: **GitHub Actions**.
+1. **`DATA_REPO_TOKEN` secret.** A fine-grained PAT with **Contents: read** on
+   `Foxlight-Foundation/skulk-results-data`, added to this repo's Actions
+   secrets. Until it exists the build still runs (validating CI) but the
+   deploy is gated off, so no empty page is published.
 
-3. **Grant the build read access to the private data repo.** Deploy keys are
-   disabled org-wide, so use a token: create a fine-grained PAT with
-   **Contents: read** on `Foxlight-Foundation/skulk-results-data`, and add it to
-   `skulk-results-ledger-web` → Settings → Secrets and variables → Actions as
-   **`DATA_REPO_TOKEN`**. Until this exists the build still runs (validating CI)
-   but the **deploy job is gated off**, so no empty page is published. The first
-   public deploy happens automatically on the next run once the token is set.
+2. **`CLOUDFLARE_API_TOKEN` secret.** Scoped to the account: Cloudflare Pages
+   (edit), Workers/D1/R2 (edit, for the future ingest plane), and DNS (edit)
+   on the `foxlight.ai` zone. The deploy workflow creates the Pages project if
+   it is ever missing; the custom domain + proxied CNAME were attached via the
+   API at cutover.
 
-4. **Confirm the base path.** The workflow sets `DEPLOY_BASE=/benchmarks/`. If
-   Pages serves the site at the default project path instead
-   (`<org>.github.io/skulk-results-ledger-web/`), change that env to
-   `/skulk-results-ledger-web/`, or point a custom domain at `/benchmarks`.
+3. **Base path.** The workflow builds with `DEPLOY_BASE=/` (root on the custom
+   domain). The old GitHub Pages project-path base is gone.
+
+4. **github.io redirect.** `github-pages-redirect.yml` (dispatch-only)
+   publishes the path-preserving redirect page to GitHub Pages; run it once
+   after any change to the canonical domain.
 
 ## Behind a reverse proxy (cloudflared) instead
 
@@ -72,5 +75,6 @@ npx serve dist                       # any static server
 cloudflared tunnel run <name>        # -> benchmarks.foxlight.ai
 ```
 
-The `404.html` fallback is emitted for Pages; for nginx use
+Cloudflare Pages serves its native SPA fallback (the deploy removes the
+postbuild `404.html`, which is a GitHub-Pages-ism); for nginx use
 `try_files $uri /index.html;` so client-side routes resolve.

@@ -1,9 +1,15 @@
 name: Deploy ledger to GitHub Pages
 
+# NOTE: the name above is historical; since 2026-07-10 this workflow deploys
+# to CLOUDFLARE PAGES at https://benchmarks.foxlight.ai (Phase 0 of the
+# skulk-open-ledger initiative). The filename stays `deploy.yml` because the
+# harness's post-battery publish step dispatches it by filename
+# (`gh workflow run deploy.yml`).
+#
 # Builds the static ledger from the durable results store and publishes it to
-# GitHub Pages under /benchmarks. Runs on push to main and can be triggered
-# manually; also runs on a schedule so newly published runs surface without a
-# code change.
+# Cloudflare Pages by direct upload. Runs on push to main, on manual/harness
+# dispatch, and on a schedule so newly published runs surface without a code
+# change.
 on:
   push:
     branches: [main]
@@ -12,40 +18,35 @@ on:
   schedule:
     - cron: '0 */6 * * *'
 
-# The published subpath. Defaults to the GitHub Pages project path so the site
-# works at <org>.github.io/<repo>/ out of the box. For a custom /benchmarks URL
-# (custom domain or reverse proxy), set this to /benchmarks/.
 env:
-  DEPLOY_BASE: /skulk-results-ledger-web/
+  # Root base: the site serves from / on the custom domain (and pages.dev).
+  DEPLOY_BASE: /
+  # Cloudflare account ids are not secrets (they appear in dashboard URLs);
+  # the API token is the credential and stays in the repo secret.
+  CLOUDFLARE_ACCOUNT_ID: 361eb1ded0b0af91e8fb35d02d8e3c34
+  PAGES_PROJECT: skulk-benchmarks
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 # Never run two deploys at once; let a newer one supersede an in-flight one.
 concurrency:
-  group: pages
+  group: cloudflare-pages
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-and-deploy:
     runs-on: ubuntu-latest
-    outputs:
-      has_data: ${{ steps.store.outcome == 'success' }}
     env:
-      # Surface the secret as an env var so it can be tested in a step `if`
-      # (referencing `secrets` directly in `if` is unreliable). A fine-grained
-      # PAT (or classic token) with read access to skulk-results-data. Deploy
-      # keys are disabled org-wide, so this is a token rather than an SSH key.
+      # Surface the secret as an env var so it can be tested in a step `if`.
+      # A fine-grained PAT with read access to skulk-results-data.
       DATA_REPO_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
     steps:
       - name: Checkout site
         uses: actions/checkout@v4
 
-      # The private results store. If the token is not set yet, this is skipped;
-      # the build still runs (validating CI) but the deploy job is gated off, so
-      # no empty page is published until real data is available.
+      # The private results store; without it the deploy is gated off so an
+      # empty ledger never publishes.
       - name: Checkout results store
         id: store
         if: ${{ env.DATA_REPO_TOKEN != '' }}
@@ -72,21 +73,38 @@ jobs:
       - name: Build
         run: npm run build
 
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
+      # Cloudflare Pages serves index.html with a 200 for unmatched paths
+      # (native SPA fallback) only when no 404.html exists; the postbuild
+      # 404.html copy is a GitHub-Pages-ism, so drop it here.
+      - name: Use native SPA fallback
+        run: rm -f dist/404.html
 
-  deploy:
-    needs: build
-    # Only publish once real data is available (the store token is set). This
-    # keeps an empty ledger from going public before the data source is wired.
-    if: ${{ needs.build.outputs.has_data == 'true' }}
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deploy
-        uses: actions/deploy-pages@v4
+      # Recreate the Pages project if it ever disappears; normally a no-op.
+      - name: Ensure Pages project exists
+        if: ${{ steps.store.outcome == 'success' }}
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          status=$(curl -s -o /dev/null -w '%{http_code}' \
+            -H "Authorization: Bearer $CF_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects/$PAGES_PROJECT")
+          if [ "$status" = "404" ]; then
+            echo "creating Pages project $PAGES_PROJECT"
+            curl -sf -X POST \
+              -H "Authorization: Bearer $CF_TOKEN" \
+              -H "Content-Type: application/json" \
+              -d "{\"name\":\"$PAGES_PROJECT\",\"production_branch\":\"main\"}" \
+              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/pages/projects" \
+              | jq '{success, errors}'
+          else
+            echo "Pages project $PAGES_PROJECT present (HTTP $status)"
+          fi
+
+      - name: Deploy to Cloudflare Pages
+        if: ${{ steps.store.outcome == 'success' }}
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: 361eb1ded0b0af91e8fb35d02d8e3c34
+          command: pages deploy dist --project-name=skulk-benchmarks --branch=main
