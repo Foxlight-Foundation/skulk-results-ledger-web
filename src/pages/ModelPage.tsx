@@ -105,6 +105,7 @@ export function ModelPage() {
       header: 'Caveats',
       render: (t) => (
         <Row $gap="5px" $wrap>
+          {t.tier === 'community' && <Chip $tone="amber">community</Chip>}
           <CaveatList caveats={t.caveats} />
         </Row>
       ),

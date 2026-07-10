@@ -67,8 +67,57 @@ jobs:
       # Generate the public data from the store, redacting operator-identifying
       # fields. --runs points at the store's flat reports/ layout; a missing
       # directory yields an empty index, not an error.
+      # Approved community submissions from the ingest Worker. Best-effort: an
+      # unreachable ingest never blocks the first-party bake (empty dir = no
+      # community tier this build).
+      - name: Fetch approved community submissions
+        if: ${{ steps.store.outcome == 'success' }}
+        env:
+          BAKE_TOKEN: ${{ secrets.INGEST_BAKE_TOKEN }}
+        run: |
+          set -u
+          mkdir -p community-data/reports
+          echo '{}' > community-data/manifest.json
+          if [ -n "$BAKE_TOKEN" ]; then
+            # Page on the submitted_at cursor until a short page: a single
+            # capped fetch would silently drop approvals beyond the first 500.
+            node -e '
+              const fs = require("fs");
+              (async () => {
+                const manifest = {};
+                let since = "1970-01-01T00:00:00Z";
+                for (;;) {
+                  const resp = await fetch(
+                    "https://skulk-ledger-ingest.thomastupper92618.workers.dev/v1/bake-export?since=" + encodeURIComponent(since),
+                    { headers: { authorization: "Bearer " + process.env.BAKE_TOKEN } },
+                  );
+                  if (!resp.ok) throw new Error("bake-export HTTP " + resp.status);
+                  const data = await resp.json();
+                  const batch = data.submissions ?? [];
+                  for (const s of batch) {
+                    fs.writeFileSync("community-data/reports/" + s.runId + ".json", JSON.stringify(s.report));
+                    manifest[s.runId] = { submitter: s.submitter };
+                    if (s.submittedAt > since) since = s.submittedAt;
+                  }
+                  if (batch.length < 500) break;
+                }
+                fs.writeFileSync("community-data/manifest.json", JSON.stringify(manifest));
+                console.log("community submissions: " + Object.keys(manifest).length);
+              })().catch((e) => {
+                // All-or-nothing: a partial page set with an empty manifest
+                // would import reports with wrong attribution.
+                fs.rmSync("community-data/reports", { recursive: true, force: true });
+                fs.mkdirSync("community-data/reports", { recursive: true });
+                fs.writeFileSync("community-data/manifest.json", "{}");
+                console.log("ingest fetch failed (" + e.message + "); building without community tier");
+              });
+            '
+          else
+            echo "bake token unset; building without community tier"
+          fi
+
       - name: Import + redact
-        run: npm run import -- --runs results-data/reports --redact
+        run: npm run import -- --runs results-data/reports --community community-data --redact
 
       - name: Build
         run: npm run build

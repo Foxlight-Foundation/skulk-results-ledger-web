@@ -22,6 +22,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import type {
   CacheClass,
+  ProvenanceTier,
   Caveat,
   EngineFamily,
   HardwareAttribution,
@@ -229,7 +230,12 @@ function modelCaveats(agg: MetricAggregate, failCount: number, issueCount: numbe
   return caveats;
 }
 
-function buildRunDetail(report: RawReport, redact: boolean): RunDetail {
+function buildRunDetail(
+  report: RawReport,
+  redact: boolean,
+  tier: ProvenanceTier = 'foxlight',
+  submitter: string | null = null,
+): RunDetail {
   const nodes = nodesFrom(report);
   const fp = report.fingerprint;
   const results = report.results ?? [];
@@ -326,6 +332,8 @@ function buildRunDetail(report: RawReport, redact: boolean): RunDetail {
     runReason: fp?.source_context?.run_reason ?? null,
     caveats: runCaveats,
     hardware: clusterHardware,
+    tier,
+    submitter,
     nodes: redact
       ? nodes.map((n) => ({ ...n, friendlyName: null, nodeId: shortHash(n.nodeId) }))
       : nodes,
@@ -386,6 +394,7 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
         caveats: result.caveats,
         credible,
         hardware: result.hardware,
+        tier: detail.tier,
       };
     });
 
@@ -393,8 +402,11 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
     // (exact placement shapes where recorded, cluster shapes otherwise, plus
     // an explicit unknown cell for pre-fingerprint history). Same credibility
     // bar as the headline: typical = median of credible per-run medians.
+    // Hardware cells aggregate tier `foxlight` only (never blend); community
+    // cells become their own view once community volume exists.
     const byHardware = new Map<string, { entry: (typeof entries)[number]; point: ModelTimePoint }[]>();
     timeline.forEach((point, i) => {
+      if (point.tier !== 'foxlight') return;
       const arr = byHardware.get(point.hardware.label) ?? [];
       arr.push({ entry: entries[i], point });
       byHardware.set(point.hardware.label, arr);
@@ -416,9 +428,12 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
     });
     hardwareCells.sort((a, b) => b.runCount - a.runCount);
 
-    // Headline numbers rest on credible points only: a single-rep wall spike
-    // (e.g. a 5-token "415 tok/s") can never set the record.
-    const credible = timeline.filter((t) => t.credible && t.decodeTpsMedian != null);
+    // Headline numbers rest on credible FOXLIGHT points only: tiers never
+    // blend, and a single-rep wall spike can never set the record. Community
+    // points stay in the timeline, badged.
+    const credible = timeline.filter(
+      (t) => t.credible && t.decodeTpsMedian != null && t.tier === 'foxlight',
+    );
     const typical = median(credible.map((t) => t.decodeTpsMedian as number));
     const latestCredible = credible.at(-1);
     const totalResults = entries.reduce((n, e) => n + e.result.passCount + e.result.failCount, 0);
@@ -444,6 +459,7 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
       lastRunAt: latest?.detail.startedAt ?? null,
       caveats: [...new Set(entries.flatMap((e) => e.result.caveats))],
       hardwareCells,
+      communityRunCount: timeline.filter((t) => t.tier === 'community').length,
       timeline,
     });
   }
@@ -524,6 +540,9 @@ function writeJson(path: string, data: unknown): void {
 
 export interface ImportOptions {
   runs: string[];
+  /** Directory of community submissions: reports/<runId>.json + manifest.json
+   * ({ [runId]: { submitter } }), as written by the bake's ingest fetch. */
+  community: string | null;
   out: string;
   redact: boolean;
 }
@@ -532,13 +551,15 @@ export function parseArgs(argv: string[]): ImportOptions {
   const runs: string[] = [];
   let out = resolve(REPO, 'public/data');
   let redact = false;
+  let community: string | null = null;
   for (let i = 0; i < argv.length; i += 1) {
     if (argv[i] === '--runs') runs.push(resolve(argv[++i]));
+    else if (argv[i] === '--community') community = resolve(argv[++i]);
     else if (argv[i] === '--out') out = resolve(argv[++i]);
     else if (argv[i] === '--redact') redact = true;
   }
   if (runs.length === 0) runs.push(resolve(REPO, '../skulk-test-harness/runs'));
-  return { runs, out, redact };
+  return { runs, community, out, redact };
 }
 
 /**
@@ -546,7 +567,7 @@ export function parseArgs(argv: string[]): ImportOptions {
  * Pure with respect to inputs (aside from writing the output tree), so the
  * watcher can call it repeatedly. Returns a one-line summary.
  */
-export function runImport({ runs, out, redact }: ImportOptions): string {
+export function runImport({ runs, community, out, redact }: ImportOptions): string {
 
   const details: RunDetail[] = [];
   const seen = new Set<string>();
@@ -558,6 +579,23 @@ export function runImport({ runs, out, redact }: ImportOptions): string {
       if (seen.has(report.run_id)) continue;
       seen.add(report.run_id);
       details.push(buildRunDetail(report, redact));
+    }
+  }
+  // Community submissions import AFTER first-party sources so a run id that
+  // exists in both stays tier `foxlight` (our archive is authoritative).
+  if (community) {
+    let manifest: Record<string, { submitter?: string }> = {};
+    try {
+      manifest = JSON.parse(readFileSync(join(community, 'manifest.json'), 'utf8'));
+    } catch {
+      manifest = {};
+    }
+    for (const file of collectReportFiles(join(community, 'reports'))) {
+      const report = loadReportFile(file);
+      if (!report || seen.has(report.run_id)) continue;
+      seen.add(report.run_id);
+      const submitter = manifest[report.run_id]?.submitter ?? 'unknown';
+      details.push(buildRunDetail(report, redact, 'community', submitter));
     }
   }
   details.sort((a, b) => (b.startedAt ?? '').localeCompare(a.startedAt ?? ''));

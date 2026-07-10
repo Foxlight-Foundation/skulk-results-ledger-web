@@ -1,0 +1,15 @@
+# Ingest Worker for the Skulk open ledger (Phase 2).
+# Deployed by .github/workflows/ingest-deploy.yml with the repo's
+# CLOUDFLARE_API_TOKEN. Raw submission blobs live in D1 (slimmed reports are
+# ~3KB); the storage seam in src/index.ts moves them to R2 once R2 is enabled
+# on the account.
+name = "skulk-ledger-ingest"
+main = "src/index.ts"
+compatibility_date = "2026-07-01"
+workers_dev = true
+account_id = "361eb1ded0b0af91e8fb35d02d8e3c34"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "skulk-ledger"
+database_id = "543e7241-5951-4202-b525-6aef1d68d419"

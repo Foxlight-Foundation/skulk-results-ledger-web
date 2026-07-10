@@ -89,6 +89,16 @@ export function MethodologyPage() {
         </CaveatCard>
       ))}
 
+      <H2>Community submissions</H2>
+      <P>
+        Operators running skulk-test-harness against their own clusters can submit results.
+        Submissions authenticate with a GitHub account, pass the same structural and plausibility
+        gates as first-party data, and wait for manual approval before appearing. Community runs
+        are always badged with their submitter and never blend into headline numbers: typical
+        throughput and the hardware matrix rest on first-party runs only. Submit by POSTing a
+        harness report to the ingest API; a first-class harness command is on the way.
+      </P>
+
       <H2>How hardware is classified</H2>
       <P>
         Each run&apos;s fingerprint records raw facts per node (accelerator vendor, total memory).

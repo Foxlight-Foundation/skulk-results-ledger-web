@@ -93,7 +93,12 @@ export function RunsPage() {
       sortValue: (r) => r.testSet,
       render: (r) => (
         <span>
-          <strong style={{ color: '#f0ede8' }}>{r.testSet}</strong> <Muted>· {r.modelSet}</Muted>
+          <strong style={{ color: '#f0ede8' }}>{r.testSet}</strong> <Muted>· {r.modelSet}</Muted>{' '}
+          {r.tier === 'community' && (
+            <Chip $tone="amber" title={`Community submission by ${r.submitter ?? 'unknown'}; not independently verified`}>
+              community
+            </Chip>
+          )}
         </span>
       ),
     },
