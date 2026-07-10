@@ -104,6 +104,11 @@ jobs:
                 fs.writeFileSync("community-data/manifest.json", JSON.stringify(manifest));
                 console.log("community submissions: " + Object.keys(manifest).length);
               })().catch((e) => {
+                // All-or-nothing: a partial page set with an empty manifest
+                // would import reports with wrong attribution.
+                fs.rmSync("community-data/reports", { recursive: true, force: true });
+                fs.mkdirSync("community-data/reports", { recursive: true });
+                fs.writeFileSync("community-data/manifest.json", "{}");
                 console.log("ingest fetch failed (" + e.message + "); building without community tier");
               });
             '

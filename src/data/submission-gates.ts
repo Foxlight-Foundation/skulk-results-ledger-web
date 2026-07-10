@@ -57,6 +57,19 @@ export function validateSubmission(report: unknown): GateResult {
     errors.push('results missing or empty');
   } else if (results.length > MAX_RESULTS) {
     errors.push(`results exceed cap (${results.length} > ${MAX_RESULTS})`);
+  } else {
+    // The bake groups on model_id and reads metrics.* per row; a malformed
+    // row in one approved submission must not throw during site rebuilds.
+    const bad = results.filter((item) => {
+      const row = item as { model_id?: unknown; metrics?: unknown };
+      return (
+        typeof row.model_id !== 'string' ||
+        !row.model_id ||
+        typeof row.metrics !== 'object' ||
+        row.metrics == null
+      );
+    }).length;
+    if (bad > 0) errors.push(`${bad} result row(s) missing model_id or metrics`);
   }
 
   // Fingerprint completeness: community runs without node data would all
