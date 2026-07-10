@@ -215,7 +215,7 @@ export interface LedgerIndex {
   suiteCount: number;
   /** Distinct Skulk versions seen across all runs (mixed-version awareness). */
   skulkVersions: string[];
-  /** Distinct KNOWN hardware labels across runs + model cells (filter options). */
+  /** Distinct KNOWN hardware labels from model cells (Explorer filter options; every label matches at least one model). */
   hardwareLabels: string[];
   runs: RunSummary[];
   models: ModelRollup[];

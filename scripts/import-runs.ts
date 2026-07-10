@@ -566,11 +566,16 @@ export function runImport({ runs, out, redact }: ImportOptions): string {
   const skulkVersions = [
     ...new Set(details.map((d) => d.skulkVersion).filter((v): v is string => v != null)),
   ].sort();
+  // Filter options come from MODEL cells only: with exact placement
+  // attribution, a heterogeneous run's whole-cluster label often matches no
+  // model, and offering it would make the Explorer filter return an empty
+  // list. Every label offered is guaranteed to select at least one model.
   const hardwareLabels = [
-    ...new Set([
-      ...details.filter((d) => d.hardware.known).map((d) => d.hardware.label),
-      ...histories.flatMap((h) => h.hardwareCells.filter((c) => c.classes.some((x) => x !== 'unknown')).map((c) => c.label)),
-    ]),
+    ...new Set(
+      histories.flatMap((h) =>
+        h.hardwareCells.filter((c) => c.classes.some((x) => x !== 'unknown')).map((c) => c.label),
+      ),
+    ),
   ].sort();
 
   const index: LedgerIndex = {
