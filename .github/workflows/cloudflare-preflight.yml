@@ -3,7 +3,12 @@
 # can reach. Dispatch-only; prints ids (private repo, logs are private) but
 # never the token. Delete after Phase 0 lands.
 name: Cloudflare preflight
-on: workflow_dispatch
+# push-trigger scoped to this branch because workflow_dispatch only works for
+# workflows registered on the default branch
+on:
+  workflow_dispatch:
+  push:
+    branches: [phase0/cloudflare-preflight]
 
 jobs:
   verify:
