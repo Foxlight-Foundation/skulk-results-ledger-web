@@ -1,5 +1,5 @@
-import { NavLink, Outlet } from 'react-router-dom';
-import styled, { keyframes } from 'styled-components';
+import { Link, NavLink, Outlet } from 'react-router-dom';
+import styled, { css, keyframes } from 'styled-components';
 import { FoxlightMark } from './FoxlightMark/FoxlightMark';
 
 /**
@@ -256,7 +256,7 @@ const ColumnHeading = styled.div`
   margin-bottom: 16px;
 `;
 
-const ColumnLink = styled.a`
+const columnLinkCss = css`
   display: block;
   font-size: 13px;
   color: ${({ theme }) => theme.colors.text3};
@@ -271,6 +271,16 @@ const ColumnLink = styled.a`
   &:hover {
     color: ${({ theme }) => theme.colors.text1};
   }
+`;
+
+const ColumnLink = styled.a`
+  ${columnLinkCss}
+`;
+
+/* Internal ledger routes go through the router (respects the configured
+   base path, no full-page reload); external links stay plain anchors. */
+const ColumnRouteLink = styled(Link)`
+  ${columnLinkCss}
 `;
 
 const FooterBottom = styled.div`
@@ -372,17 +382,23 @@ export function Layout() {
           {FOOTER_COLUMNS.map((col) => (
             <div key={col.heading}>
               <ColumnHeading>{col.heading}</ColumnHeading>
-              {col.links.map((link) => (
-                <ColumnLink
-                  key={link.href}
-                  href={link.href}
-                  {...('external' in link && link.external
-                    ? { target: '_blank', rel: 'noopener noreferrer' }
-                    : {})}
-                >
-                  {link.label}
-                </ColumnLink>
-              ))}
+              {col.links.map((link) =>
+                link.href.startsWith('/') ? (
+                  <ColumnRouteLink key={link.href} to={link.href}>
+                    {link.label}
+                  </ColumnRouteLink>
+                ) : (
+                  <ColumnLink
+                    key={link.href}
+                    href={link.href}
+                    {...('external' in link && link.external
+                      ? { target: '_blank', rel: 'noopener noreferrer' }
+                      : {})}
+                  >
+                    {link.label}
+                  </ColumnLink>
+                ),
+              )}
             </div>
           ))}
         </Columns>
