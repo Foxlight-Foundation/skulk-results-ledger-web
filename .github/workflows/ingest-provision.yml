@@ -1,7 +1,5 @@
-# One-shot provisioning for the ingest plane (skulk-open-ledger Phase 2):
-# creates the D1 database and R2 bucket if missing and prints the D1 id for
-# wrangler.toml. Branch-triggered (the Cloudflare token lives in repo
-# secrets); removed once provisioning is wired into the deploy.
+# One-shot maintenance for the ingest plane. Currently: delete smoke-test
+# rows created by the Phase 2 end-to-end validation. Removed before merge.
 name: Ingest provision
 on:
   workflow_dispatch:
@@ -9,37 +7,17 @@ on:
     branches: [feat/ingest-plane]
     paths: ['.github/workflows/ingest-provision.yml']
 
-env:
-  CLOUDFLARE_ACCOUNT_ID: 361eb1ded0b0af91e8fb35d02d8e3c34
-  D1_NAME: skulk-ledger
-  R2_BUCKET: skulk-ledger-submissions
-
 jobs:
-  provision:
+  cleanup:
     runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: 361eb1ded0b0af91e8fb35d02d8e3c34
     steps:
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Create D1 + R2 if missing
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      - name: Delete smoke-test submissions
         run: |
-          set -euo pipefail
-          npm i -g wrangler@3 >/dev/null 2>&1
-          echo "== existing D1 databases =="
-          wrangler d1 list --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const l=JSON.parse(s);console.log(l.map(d=>d.name+' '+d.uuid).join('\n')||'(none)')})"
-          if ! wrangler d1 list --json | grep -q "\"$D1_NAME\""; then
-            echo "creating D1 $D1_NAME"
-            wrangler d1 create "$D1_NAME"
-          fi
-          echo "== D1 id for wrangler.toml =="
-          wrangler d1 list --json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const l=JSON.parse(s);const db=l.find(d=>d.name==='skulk-ledger');console.log('D1_ID='+(db?db.uuid:'MISSING'))})"
-          echo "== R2 buckets =="
-          if ! wrangler r2 bucket list | grep -q "$R2_BUCKET"; then
-            echo "creating R2 bucket $R2_BUCKET"
-            wrangler r2 bucket create "$R2_BUCKET"
-          else
-            echo "bucket $R2_BUCKET present"
-          fi
+          npx --yes wrangler@3 d1 execute skulk-ledger --remote \
+            --command "DELETE FROM submissions WHERE run_id LIKE '%smoke-test%'; SELECT COUNT(*) AS remaining FROM submissions;"
