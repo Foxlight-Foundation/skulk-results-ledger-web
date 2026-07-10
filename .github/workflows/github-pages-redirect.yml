@@ -1,0 +1,53 @@
+name: Publish github.io redirect
+
+# One-shot (dispatch-only): publishes a tiny redirect page to the old GitHub
+# Pages URL so links to
+# https://foxlight-foundation.github.io/skulk-results-ledger-web/ land on
+# https://benchmarks.foxlight.ai (path-preserving). Run once after the
+# Cloudflare Pages cutover; harmless to re-run.
+on: workflow_dispatch
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  redirect:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Build redirect page
+        run: |
+          mkdir -p redirect
+          cat > redirect/index.html <<'HTML'
+          <!doctype html>
+          <html lang="en"><head><meta charset="utf-8">
+          <title>Moved to benchmarks.foxlight.ai</title>
+          <link rel="canonical" href="https://benchmarks.foxlight.ai/">
+          <script>
+            var path = location.pathname.replace(/^\/skulk-results-ledger-web/, '');
+            location.replace('https://benchmarks.foxlight.ai' + path + location.search + location.hash);
+          </script>
+          <meta http-equiv="refresh" content="0; url=https://benchmarks.foxlight.ai/">
+          </head><body>
+          The Skulk results ledger moved to
+          <a href="https://benchmarks.foxlight.ai">benchmarks.foxlight.ai</a>.
+          </body></html>
+          HTML
+          cp redirect/index.html redirect/404.html
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: redirect
+
+      - name: Deploy to GitHub Pages
+        id: deploy
+        uses: actions/deploy-pages@v4
