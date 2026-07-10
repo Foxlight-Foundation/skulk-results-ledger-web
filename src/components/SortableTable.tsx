@@ -16,7 +16,8 @@ const Scroll = styled.div`
   border: 1px solid ${({ theme }) => theme.colors.border1};
   border-radius: ${({ theme }) => theme.radii.card};
   background: ${({ theme }) => theme.colors.panelBg};
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(20px) saturate(1.3);
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
 `;
 
 const Table = styled.table`

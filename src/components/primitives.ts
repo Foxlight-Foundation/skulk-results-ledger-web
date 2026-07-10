@@ -4,7 +4,7 @@ import styled, { css } from 'styled-components';
 /** Centered page column with responsive gutters. */
 export const Page = styled.div`
   width: 100%;
-  max-width: 1240px;
+  max-width: 1100px;
   margin: 0 auto;
   padding: ${({ theme }) => `${theme.spacing.xl} ${theme.spacing.lg} ${theme.spacing.xxl}`};
 
@@ -40,7 +40,8 @@ export const Mono = styled.span`
 /** Glass panel with the design system's blur + grounding shadow. */
 export const Panel = styled.div`
   background: ${({ theme }) => theme.colors.panelBg};
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(20px) saturate(1.3);
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
   border: 1px solid ${({ theme }) => theme.colors.border1};
   border-radius: ${({ theme }) => theme.radii.card};
   box-shadow: ${({ theme }) => theme.shadows.card};
@@ -50,14 +51,23 @@ const interactiveCard = css`
   transition: border-color 160ms ease, transform 160ms ease, box-shadow 160ms ease;
   &:hover {
     border-color: ${({ theme }) => theme.colors.borderAmber};
+    box-shadow: 0 0 28px rgba(255, 149, 0, 0.18);
     transform: translateY(-2px);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+    &:hover {
+      transform: none;
+    }
   }
 `;
 
 export const CardLink = styled(Link)`
   display: block;
   background: ${({ theme }) => theme.colors.panelBg};
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(20px) saturate(1.3);
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
   border: 1px solid ${({ theme }) => theme.colors.border1};
   border-radius: ${({ theme }) => theme.radii.card};
   padding: ${({ theme }) => theme.spacing.lg};
