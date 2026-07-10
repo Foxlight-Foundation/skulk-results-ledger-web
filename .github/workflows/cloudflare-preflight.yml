@@ -1,0 +1,36 @@
+# Phase 0 preflight (skulk-open-ledger initiative): verify the
+# CLOUDFLARE_API_TOKEN repo secret works and discover the account and zone it
+# can reach. Dispatch-only; prints ids (private repo, logs are private) but
+# never the token. Delete after Phase 0 lands.
+name: Cloudflare preflight
+on: workflow_dispatch
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify token
+        env:
+          CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -uo pipefail
+          echo "== token verify =="
+          curl -s -H "Authorization: Bearer $CF_TOKEN" \
+            https://api.cloudflare.com/client/v4/user/tokens/verify \
+            | jq '{success, status: .result.status, errors}'
+          echo "== accounts visible to token =="
+          curl -s -H "Authorization: Bearer $CF_TOKEN" \
+            https://api.cloudflare.com/client/v4/accounts \
+            | jq '{success, accounts: [.result[]? | {id, name}], errors}'
+          echo "== zones visible to token =="
+          curl -s -H "Authorization: Bearer $CF_TOKEN" \
+            https://api.cloudflare.com/client/v4/zones \
+            | jq '{success, zones: [.result[]? | {id, name, status}], errors}'
+          echo "== pages projects (per account) =="
+          for acct in $(curl -s -H "Authorization: Bearer $CF_TOKEN" \
+              https://api.cloudflare.com/client/v4/accounts | jq -r '.result[]?.id'); do
+            echo "account $acct:"
+            curl -s -H "Authorization: Bearer $CF_TOKEN" \
+              "https://api.cloudflare.com/client/v4/accounts/$acct/pages/projects" \
+              | jq '{success, projects: [.result[]? | {name, subdomain}], errors}'
+          done
