@@ -2,18 +2,32 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any" />
+    <link rel="icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#060914" media="(prefers-color-scheme: dark)" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+
+    <!-- Preload the night-sky background so the first paint matches foxlight.ai. -->
+    <link rel="preload" as="image" href="/starry_bg.webp" type="image/webp" />
+
+    <!-- Google Fonts: DM Sans (display), Inter (body), Geist Mono (technical).
+         Same axes/weights as foxlight.ai so type renders identically. -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600&family=Inter:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap"
+    />
+
+    <title>Benchmarks - FoxlightAI</title>
     <meta
       name="description"
       content="Skulk performance, honestly measured. An auditable ledger of distributed-inference benchmark runs across the Foxlight fleet."
     />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@500;600&family=Geist+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap"
-      rel="stylesheet"
-    />
-    <title>Skulk Results Ledger</title>
+    <link rel="canonical" href="https://benchmarks.foxlight.ai" />
   </head>
   <body>
     <div id="root"></div>

@@ -78,6 +78,13 @@ export const theme = {
       '0 2px 8px rgba(0,0,0,0.30)',
       'inset 0 1px 0 rgba(240,237,232,0.06)',
     ].join(', '),
+    navHover: [
+      '0 0 0 1px rgba(240,237,232,0.06)',
+      '0 8px 40px rgba(0,0,0,0.55)',
+      '0 2px 8px rgba(0,0,0,0.30)',
+      '0 0 24px rgba(255,149,0,0.06)',
+      'inset 0 1px 0 rgba(240,237,232,0.08)',
+    ].join(', '),
   },
   spacing,
   radii,

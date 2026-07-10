@@ -5,7 +5,8 @@ import styled, { useTheme } from 'styled-components';
 
 export const ChartCard = styled.div`
   background: ${({ theme }) => theme.colors.panelBg};
-  backdrop-filter: blur(14px);
+  backdrop-filter: blur(20px) saturate(1.3);
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
   border: 1px solid ${({ theme }) => theme.colors.border1};
   border-radius: ${({ theme }) => theme.radii.card};
   padding: ${({ theme }) => theme.spacing.lg};
