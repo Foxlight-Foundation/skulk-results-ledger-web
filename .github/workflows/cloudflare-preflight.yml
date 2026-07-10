@@ -1,41 +1,62 @@
-# Phase 0 preflight (skulk-open-ledger initiative): verify the
-# CLOUDFLARE_API_TOKEN repo secret works and discover the account and zone it
-# can reach. Dispatch-only; prints ids (private repo, logs are private) but
-# never the token. Delete after Phase 0 lands.
+# Phase 0 cutover (skulk-open-ledger initiative): attach the confirmed custom
+# domain benchmarks.foxlight.ai to the Pages project and create the DNS
+# record. Idempotent (checks before creating). Branch-triggered because the
+# token lives in repo secrets; deleted when Phase 0 lands on main.
 name: Cloudflare preflight
-# push-trigger scoped to this branch because workflow_dispatch only works for
-# workflows registered on the default branch
 on:
   workflow_dispatch:
   push:
     branches: [phase0/cloudflare-preflight]
 
+env:
+  ACCOUNT_ID: 361eb1ded0b0af91e8fb35d02d8e3c34
+  ZONE_ID: 0cbb116cce190a6390262f6acd064ea2
+  PAGES_PROJECT: skulk-benchmarks
+  DOMAIN: benchmarks.foxlight.ai
+
 jobs:
-  verify:
+  attach-domain:
     runs-on: ubuntu-latest
     steps:
-      - name: Verify token
+      - name: Attach custom domain + DNS
         env:
           CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         run: |
-          set -uo pipefail
-          echo "== token verify =="
-          curl -s -H "Authorization: Bearer $CF_TOKEN" \
-            https://api.cloudflare.com/client/v4/user/tokens/verify \
-            | jq '{success, status: .result.status, errors}'
-          echo "== accounts visible to token =="
-          curl -s -H "Authorization: Bearer $CF_TOKEN" \
-            https://api.cloudflare.com/client/v4/accounts \
-            | jq '{success, accounts: [.result[]? | {id, name}], errors}'
-          echo "== zones visible to token =="
-          curl -s -H "Authorization: Bearer $CF_TOKEN" \
-            https://api.cloudflare.com/client/v4/zones \
-            | jq '{success, zones: [.result[]? | {id, name, status}], errors}'
-          echo "== pages projects (per account) =="
-          for acct in $(curl -s -H "Authorization: Bearer $CF_TOKEN" \
-              https://api.cloudflare.com/client/v4/accounts | jq -r '.result[]?.id'); do
-            echo "account $acct:"
-            curl -s -H "Authorization: Bearer $CF_TOKEN" \
-              "https://api.cloudflare.com/client/v4/accounts/$acct/pages/projects" \
-              | jq '{success, projects: [.result[]? | {name, subdomain}], errors}'
-          done
+          set -euo pipefail
+          auth=(-H "Authorization: Bearer $CF_TOKEN")
+
+          echo "== existing domains on project =="
+          have_domain=$(curl -s "${auth[@]}" \
+            "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/$PAGES_PROJECT/domains" \
+            | jq -r --arg d "$DOMAIN" '[.result[]? | select(.name == $d)] | length')
+          if [ "$have_domain" = "0" ]; then
+            echo "attaching $DOMAIN to $PAGES_PROJECT"
+            curl -sf -X POST "${auth[@]}" -H "Content-Type: application/json" \
+              -d "{\"name\":\"$DOMAIN\"}" \
+              "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/$PAGES_PROJECT/domains" \
+              | jq '{success, status: .result.status, errors}'
+          else
+            echo "$DOMAIN already attached"
+          fi
+
+          echo "== DNS record =="
+          have_record=$(curl -s "${auth[@]}" \
+            "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?name=$DOMAIN" \
+            | jq -r '.result | length')
+          if [ "$have_record" = "0" ]; then
+            echo "creating proxied CNAME $DOMAIN -> $PAGES_PROJECT.pages.dev"
+            curl -sf -X POST "${auth[@]}" -H "Content-Type: application/json" \
+              -d "{\"type\":\"CNAME\",\"name\":\"$DOMAIN\",\"content\":\"$PAGES_PROJECT.pages.dev\",\"proxied\":true}" \
+              "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records" \
+              | jq '{success, record: .result.name, errors}'
+          else
+            echo "DNS record for $DOMAIN already exists:"
+            curl -s "${auth[@]}" \
+              "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?name=$DOMAIN" \
+              | jq '.result[] | {type, name, content, proxied}'
+          fi
+
+          echo "== domain validation status =="
+          curl -s "${auth[@]}" \
+            "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/pages/projects/$PAGES_PROJECT/domains" \
+            | jq '.result[]? | {name, status, validation_data: .validation_data.status}'
