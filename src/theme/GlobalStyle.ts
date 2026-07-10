@@ -1,5 +1,10 @@
 import { createGlobalStyle } from 'styled-components';
 
+/* Vite rebases URLs in index.html at build time but cannot see into runtime
+   CSS-in-JS strings, so the sky asset must build its own base-aware URL for
+   subpath deploys (DEPLOY_BASE other than /). BASE_URL always ends with /. */
+const starrySkyUrl = `${import.meta.env.BASE_URL}starry_bg.webp`;
+
 /**
  * Global reset + canvas, ported 1:1 from foxlight.ai (FoxlightWeb
  * AppThemeProvider) so a visitor moving between foxlight.ai and
@@ -39,7 +44,7 @@ export const GlobalStyle = createGlobalStyle`
     inset: 0;
     z-index: -1;
     pointer-events: none;
-    background-image: url('/starry_bg.webp');
+    background-image: url('${starrySkyUrl}');
     background-size: cover;
     background-position: center center;
     background-repeat: no-repeat;
