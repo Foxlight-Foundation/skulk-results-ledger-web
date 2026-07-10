@@ -145,6 +145,11 @@ export function RunPage() {
         <Chip $tone="neutral">{data.cacheClass} cache</Chip>
         {data.topologyLabel && <Chip>{data.topologyLabel}</Chip>}
         {data.hardware.known && <Chip $tone="cyan">{data.hardware.label}</Chip>}
+        {data.tier === 'community' && (
+          <Chip $tone="amber" title="Community submission; validated and approved, not independently verified">
+            community · {data.submitter ?? 'unknown'}
+          </Chip>
+        )}
         <CaveatList caveats={data.caveats} />
       </Row>
 

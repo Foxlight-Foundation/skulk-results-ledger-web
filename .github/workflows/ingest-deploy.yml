@@ -2,11 +2,10 @@ name: Deploy ingest Worker
 
 # Deploys the community-submissions ingest Worker (skulk-open-ledger Phase 2):
 # applies the idempotent D1 schema, pushes Worker secrets from repo secrets,
-# and deploys. Runs on ingest changes on main, on this feature branch while
-# it is in review, and on manual dispatch.
+# and deploys. Runs on ingest changes on main and on manual dispatch.
 on:
   push:
-    branches: [main, feat/ingest-plane]
+    branches: [main]
     paths: ['ingest/**', 'src/data/submission-gates.ts', '.github/workflows/ingest-deploy.yml']
   workflow_dispatch:
 

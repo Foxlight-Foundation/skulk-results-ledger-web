@@ -8,7 +8,15 @@
  * it is declared here; if the site reads a field, it is declared here.
  */
 
-export const LEDGER_SCHEMA_VERSION = '1.1';
+export const LEDGER_SCHEMA_VERSION = '1.2';
+
+/**
+ * Provenance tier (the open-ledger's load-bearing concept): `foxlight` =
+ * first-party fleet runs from the git archive; `community` = third-party
+ * submissions through the ingest API (validated + manually approved, not
+ * independently verified). Tiers never blend into one headline number.
+ */
+export type ProvenanceTier = 'foxlight' | 'community';
 
 /**
  * Canonical hardware shape for a set of nodes (a whole cluster or one
@@ -116,6 +124,9 @@ export interface RunSummary {
   caveats: Caveat[];
   /** Whole-cluster hardware shape for this run. */
   hardware: HardwareProfile;
+  tier: ProvenanceTier;
+  /** GitHub login of the community submitter; null for tier `foxlight`. */
+  submitter: string | null;
 }
 
 /** One model's result within a single run (for the run-detail view). */
@@ -166,6 +177,7 @@ export interface ModelTimePoint {
   credible: boolean;
   /** Hardware that served this model in this run. */
   hardware: HardwareProfile;
+  tier: ProvenanceTier;
 }
 
 /** Rollup card for one model in the explorer. */
@@ -195,6 +207,13 @@ export interface ModelRollup {
   caveats: Caveat[];
   /** Per-hardware aggregates (one cell per distinct hardware shape observed). */
   hardwareCells: HardwareCell[];
+  /**
+   * Community runs observed for this model. Headline numbers
+   * (decodeTpsTypical/Latest) and hardware cells rest on tier `foxlight`
+   * only (tiers never blend); community points appear in the timeline,
+   * badged.
+   */
+  communityRunCount: number;
 }
 
 /** Full per-model history file (`public/data/models/<slug>.json`). */

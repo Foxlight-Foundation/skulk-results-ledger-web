@@ -67,8 +67,35 @@ jobs:
       # Generate the public data from the store, redacting operator-identifying
       # fields. --runs points at the store's flat reports/ layout; a missing
       # directory yields an empty index, not an error.
+      # Approved community submissions from the ingest Worker. Best-effort: an
+      # unreachable ingest never blocks the first-party bake (empty dir = no
+      # community tier this build).
+      - name: Fetch approved community submissions
+        if: ${{ steps.store.outcome == 'success' }}
+        env:
+          BAKE_TOKEN: ${{ secrets.INGEST_BAKE_TOKEN }}
+        run: |
+          set -u
+          mkdir -p community-data/reports
+          echo '{}' > community-data/manifest.json
+          if [ -n "$BAKE_TOKEN" ] && curl -sf https://skulk-ledger-ingest.thomastupper92618.workers.dev/v1/bake-export               -H "Authorization: Bearer $BAKE_TOKEN" -o /tmp/bake-export.json; then
+            node -e '
+              const fs = require("fs");
+              const data = JSON.parse(fs.readFileSync("/tmp/bake-export.json", "utf8"));
+              const manifest = {};
+              for (const s of data.submissions ?? []) {
+                fs.writeFileSync(`community-data/reports/${s.runId}.json`, JSON.stringify(s.report));
+                manifest[s.runId] = { submitter: s.submitter };
+              }
+              fs.writeFileSync("community-data/manifest.json", JSON.stringify(manifest));
+              console.log(`community submissions: ${Object.keys(manifest).length}`);
+            '
+          else
+            echo "ingest unreachable or token unset; building without community tier"
+          fi
+
       - name: Import + redact
-        run: npm run import -- --runs results-data/reports --redact
+        run: npm run import -- --runs results-data/reports --community community-data --redact
 
       - name: Build
         run: npm run build
