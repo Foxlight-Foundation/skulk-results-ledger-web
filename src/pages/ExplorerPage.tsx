@@ -104,6 +104,22 @@ const SectionLabel = styled.h2`
 
 const FAMILIES: (EngineFamily | 'all')[] = ['all', 'mlx', 'llama_cpp'];
 
+const HardwareSelect = styled.select`
+  background: ${({ theme }) => theme.colors.dusk};
+  border: 1px solid ${({ theme }) => theme.colors.border1};
+  border-radius: ${({ theme }) => theme.radii.pill};
+  padding: 9px 14px;
+  color: ${({ theme }) => theme.colors.text2};
+  font-family: ${({ theme }) => theme.typography.fontFamily.body};
+  font-size: ${({ theme }) => theme.typography.fontSize.sm};
+  max-width: 320px;
+  cursor: pointer;
+  &:focus {
+    outline: none;
+    border-color: ${({ theme }) => theme.colors.borderAmber};
+  }
+`;
+
 // Floor for the "Skulk versions" stat: the count of released versions in the
 // Skulk CHANGELOG at build time (8, excluding [Unreleased]). Older runs predate
 // runtime fingerprints and so report no version, which would understate history
@@ -114,16 +130,18 @@ export function ExplorerPage() {
   const { data, error, loading } = useIndex();
   const navigate = useNavigate();
   const [family, setFamily] = useState<EngineFamily | 'all'>('all');
+  const [hardware, setHardware] = useState('all');
   const [query, setQuery] = useState('');
 
   const models = useMemo(() => {
     if (!data) return [];
     return data.models.filter((m) => {
       if (family !== 'all' && m.family !== family) return false;
+      if (hardware !== 'all' && !m.hardwareCells.some((c) => c.label === hardware)) return false;
       if (query && !m.displayName.toLowerCase().includes(query.toLowerCase())) return false;
       return true;
     });
-  }, [data, family, query]);
+  }, [data, family, hardware, query]);
 
   if (loading) return <LoadingState />;
   if (error) return <ErrorState error={error} />;
@@ -238,6 +256,14 @@ export function ExplorerPage() {
             {f === 'all' ? 'All engines' : FAMILY_META[f].label}
           </FilterBtn>
         ))}
+        <HardwareSelect value={hardware} onChange={(e) => setHardware(e.target.value)}>
+          <option value="all">All hardware</option>
+          {data.hardwareLabels.map((label) => (
+            <option key={label} value={label}>
+              {label}
+            </option>
+          ))}
+        </HardwareSelect>
       </Controls>
 
       <SectionLabel>All models</SectionLabel>

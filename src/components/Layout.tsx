@@ -300,6 +300,7 @@ const NAV = [
   { to: '/', label: 'Explorer', end: true },
   { to: '/runs', label: 'Runs' },
   { to: '/suites', label: 'Suites' },
+  { to: '/hardware', label: 'Hardware' },
   { to: '/compare', label: 'Compare' },
   { to: '/methodology', label: 'Methodology' },
 ];
@@ -311,6 +312,7 @@ const FOOTER_COLUMNS = [
       { label: 'Explorer', href: '/' },
       { label: 'Runs', href: '/runs' },
       { label: 'Suites', href: '/suites' },
+      { label: 'Hardware', href: '/hardware' },
       { label: 'Compare', href: '/compare' },
       { label: 'Methodology', href: '/methodology' },
     ],

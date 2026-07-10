@@ -104,11 +104,15 @@ export function RunsPage() {
       render: (r) => <ResultBar pass={r.passCount} fail={r.failCount} />,
     },
     {
-      key: 'nodes',
-      header: 'Nodes',
-      align: 'center',
-      sortValue: (r) => r.nodeCount,
-      render: (r) => r.nodeCount || '—',
+      key: 'hardware',
+      header: 'Hardware',
+      sortValue: (r) => (r.hardware.known ? r.hardware.label : ''),
+      render: (r) =>
+        r.hardware.known ? (
+          <span style={{ whiteSpace: 'nowrap' }}>{r.hardware.label}</span>
+        ) : (
+          <Muted>{r.nodeCount ? `${r.nodeCount} nodes` : 'unknown'}</Muted>
+        ),
     },
     {
       key: 'version',
