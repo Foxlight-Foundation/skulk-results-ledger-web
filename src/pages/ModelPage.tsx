@@ -125,8 +125,17 @@ export function ModelPage() {
           {data.hardwareCells
             .filter((c) => c.classes.some((x) => x !== 'unknown'))
             .map((c) => (
-              <Chip key={c.label} $tone="cyan">
+              <Chip
+                key={c.label}
+                $tone="cyan"
+                title={
+                  c.clusterAttributedRunCount > 0
+                    ? 'Includes cluster-fallback runs (placement not recorded; shape is an upper bound)'
+                    : undefined
+                }
+              >
                 {c.label}
+                {c.clusterAttributedRunCount === c.runCount && ' (cluster)'}
               </Chip>
             ))}
           <Muted>{data.modelId}</Muted>

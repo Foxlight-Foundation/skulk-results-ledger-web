@@ -147,12 +147,25 @@ export function HardwarePage() {
                 {labels.map((label) => {
                   const cell = m.hardwareCells.find((c) => c.label === label);
                   if (!cell) return <td key={label}>{'·'}</td>;
+                  const clusterNote =
+                    cell.clusterAttributedRunCount > 0
+                      ? `; ${cell.clusterAttributedRunCount} cluster-fallback (whole-cluster shape, placement not recorded)`
+                      : '';
                   return (
-                    <td key={label} title={`${cell.runCount} run(s), ${cell.credibleRunCount} credible`}>
+                    <td
+                      key={label}
+                      title={`${cell.runCount} run(s), ${cell.credibleRunCount} credible${clusterNote}`}
+                    >
                       {cell.decodeTpsTypical != null ? (
-                        <Cell $credible>{formatTps(cell.decodeTpsTypical)}</Cell>
+                        <Cell $credible>
+                          {formatTps(cell.decodeTpsTypical)}
+                          {cell.clusterAttributedRunCount > 0 && <Muted>*</Muted>}
+                        </Cell>
                       ) : (
-                        <Cell $credible={false}>{cell.runCount} run{cell.runCount === 1 ? '' : 's'}</Cell>
+                        <Cell $credible={false}>
+                          {cell.runCount} run{cell.runCount === 1 ? '' : 's'}
+                          {cell.clusterAttributedRunCount > 0 && '*'}
+                        </Cell>
                       )}
                     </td>
                   );
@@ -164,7 +177,9 @@ export function HardwarePage() {
       </Scroll>
 
       <FootNote>
-        Hardware classes are vendor + memory tier, derived from each run&apos;s fingerprint;
+        Cells marked * include cluster-fallback samples: the run did not record which nodes
+        served the model, so the shape shown is the whole cluster (an upper bound), not
+        verified placement. Hardware classes are vendor + memory tier, derived from each run&apos;s fingerprint;
         chip-level classes (M4 vs M5, specific GPUs) arrive as newer runs record accelerator
         names. {unknownRuns > 0 ? (
           <>

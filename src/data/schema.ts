@@ -45,6 +45,12 @@ export interface HardwareCell {
   decodeTpsTypical: number | null;
   passRate: number;
   lastRunAt: string | null;
+  /**
+   * How many of this cell's runs used the whole-cluster fallback (placement
+   * nodes not recorded) rather than exact placement attribution. When > 0 the
+   * cell's shape is an upper bound, and the UI marks it.
+   */
+  clusterAttributedRunCount: number;
 }
 
 /** Coarse engine family, derived from placement + fingerprint, for grouping. */

@@ -411,6 +411,7 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
         decodeTpsTypical: median(crediblePoints.map((c) => c.point.decodeTpsMedian as number)),
         passRate: cellResults ? cellPass / cellResults : 0,
         lastRunAt: cells.map((c) => c.point.startedAt).filter((v): v is string => v != null).sort().at(-1) ?? null,
+        clusterAttributedRunCount: cells.filter((c) => c.entry.result.hardwareAttribution === 'cluster').length,
       };
     });
     hardwareCells.sort((a, b) => b.runCount - a.runCount);
