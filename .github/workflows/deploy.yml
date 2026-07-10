@@ -78,20 +78,37 @@ jobs:
           set -u
           mkdir -p community-data/reports
           echo '{}' > community-data/manifest.json
-          if [ -n "$BAKE_TOKEN" ] && curl -sf https://skulk-ledger-ingest.thomastupper92618.workers.dev/v1/bake-export               -H "Authorization: Bearer $BAKE_TOKEN" -o /tmp/bake-export.json; then
+          if [ -n "$BAKE_TOKEN" ]; then
+            # Page on the submitted_at cursor until a short page: a single
+            # capped fetch would silently drop approvals beyond the first 500.
             node -e '
               const fs = require("fs");
-              const data = JSON.parse(fs.readFileSync("/tmp/bake-export.json", "utf8"));
-              const manifest = {};
-              for (const s of data.submissions ?? []) {
-                fs.writeFileSync(`community-data/reports/${s.runId}.json`, JSON.stringify(s.report));
-                manifest[s.runId] = { submitter: s.submitter };
-              }
-              fs.writeFileSync("community-data/manifest.json", JSON.stringify(manifest));
-              console.log(`community submissions: ${Object.keys(manifest).length}`);
+              (async () => {
+                const manifest = {};
+                let since = "1970-01-01T00:00:00Z";
+                for (;;) {
+                  const resp = await fetch(
+                    "https://skulk-ledger-ingest.thomastupper92618.workers.dev/v1/bake-export?since=" + encodeURIComponent(since),
+                    { headers: { authorization: "Bearer " + process.env.BAKE_TOKEN } },
+                  );
+                  if (!resp.ok) throw new Error("bake-export HTTP " + resp.status);
+                  const data = await resp.json();
+                  const batch = data.submissions ?? [];
+                  for (const s of batch) {
+                    fs.writeFileSync("community-data/reports/" + s.runId + ".json", JSON.stringify(s.report));
+                    manifest[s.runId] = { submitter: s.submitter };
+                    if (s.submittedAt > since) since = s.submittedAt;
+                  }
+                  if (batch.length < 500) break;
+                }
+                fs.writeFileSync("community-data/manifest.json", JSON.stringify(manifest));
+                console.log("community submissions: " + Object.keys(manifest).length);
+              })().catch((e) => {
+                console.log("ingest fetch failed (" + e.message + "); building without community tier");
+              });
             '
           else
-            echo "ingest unreachable or token unset; building without community tier"
+            echo "bake token unset; building without community tier"
           fi
 
       - name: Import + redact
