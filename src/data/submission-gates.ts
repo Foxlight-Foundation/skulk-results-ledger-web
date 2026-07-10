@@ -68,6 +68,15 @@ export function validateSubmission(report: unknown): GateResult {
   const nodes = r.fingerprint?.cluster?.nodes;
   if (!Array.isArray(nodes) || nodes.length === 0) {
     errors.push('fingerprint.cluster.nodes missing or empty');
+  } else {
+    // Each node needs a string node_id: the bake hashes node ids during
+    // redaction, so a malformed node in one approved submission would
+    // otherwise throw and block every site rebuild.
+    const bad = nodes.filter(
+      (n) => typeof (n as { node_id?: unknown }).node_id !== 'string' ||
+        !(n as { node_id: string }).node_id,
+    ).length;
+    if (bad > 0) errors.push(`${bad} node entr(ies) missing a string node_id`);
   }
 
   // Plausibility: warn, never reject; moderation and the site's caveat
