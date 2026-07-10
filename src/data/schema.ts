@@ -8,7 +8,44 @@
  * it is declared here; if the site reads a field, it is declared here.
  */
 
-export const LEDGER_SCHEMA_VERSION = '1.0';
+export const LEDGER_SCHEMA_VERSION = '1.1';
+
+/**
+ * Canonical hardware shape for a set of nodes (a whole cluster or one
+ * placement's subset), derived at import by scripts/hardware-taxonomy.ts.
+ * Classes are opaque canonical strings (today `<vendor>-<tier>gb`, e.g.
+ * `apple-16gb`); the site renders `label` and filters on `classes`/`label`.
+ */
+export interface HardwareProfile {
+  /** Sorted distinct canonical node classes present. */
+  classes: string[];
+  /** Human label, e.g. "2x Apple 16GB + 1x AMD 64GB"; "unknown hardware" when unknown. */
+  label: string;
+  nodeCount: number;
+  homogeneous: boolean;
+  /** False when the run's fingerprint carries no classifiable node data (pre-fingerprint seed runs). */
+  known: boolean;
+}
+
+/**
+ * How a model result's hardware was attributed: `placement` = exact (the
+ * run recorded which nodes served this model), `cluster` = the whole-cluster
+ * shape (placement unknown; honest upper bound), `unknown` = no node data.
+ */
+export type HardwareAttribution = 'placement' | 'cluster' | 'unknown';
+
+/** One model-by-hardware aggregate cell (for the hardware matrix). */
+export interface HardwareCell {
+  /** Profile label this cell aggregates over (a placement/cluster shape). */
+  label: string;
+  classes: string[];
+  runCount: number;
+  credibleRunCount: number;
+  /** Median across this model's credible per-run medians ON this hardware. */
+  decodeTpsTypical: number | null;
+  passRate: number;
+  lastRunAt: string | null;
+}
 
 /** Coarse engine family, derived from placement + fingerprint, for grouping. */
 export type EngineFamily = 'mlx' | 'llama_cpp' | 'llama_server' | 'unknown';
@@ -71,6 +108,8 @@ export interface RunSummary {
   hasFingerprint: boolean;
   runReason: string | null;
   caveats: Caveat[];
+  /** Whole-cluster hardware shape for this run. */
+  hardware: HardwareProfile;
 }
 
 /** One model's result within a single run (for the run-detail view). */
@@ -83,6 +122,9 @@ export interface RunModelResult {
   decodeTps: MetricAggregate;
   ttft: MetricAggregate;
   caveats: Caveat[];
+  /** Hardware that served this model (exact when attribution is `placement`). */
+  hardware: HardwareProfile;
+  hardwareAttribution: HardwareAttribution;
 }
 
 /** Full per-run detail file (`public/data/runs/<runId>.json`). */
@@ -116,6 +158,8 @@ export interface ModelTimePoint {
    * a record. Non-credible points are still plotted (dimmed) for honesty.
    */
   credible: boolean;
+  /** Hardware that served this model in this run. */
+  hardware: HardwareProfile;
 }
 
 /** Rollup card for one model in the explorer. */
@@ -143,6 +187,8 @@ export interface ModelRollup {
   nodeCountsObserved: number[];
   lastRunAt: string | null;
   caveats: Caveat[];
+  /** Per-hardware aggregates (one cell per distinct hardware shape observed). */
+  hardwareCells: HardwareCell[];
 }
 
 /** Full per-model history file (`public/data/models/<slug>.json`). */
@@ -169,6 +215,8 @@ export interface LedgerIndex {
   suiteCount: number;
   /** Distinct Skulk versions seen across all runs (mixed-version awareness). */
   skulkVersions: string[];
+  /** Distinct KNOWN hardware labels across runs + model cells (filter options). */
+  hardwareLabels: string[];
   runs: RunSummary[];
   models: ModelRollup[];
   suites: SuiteRollup[];

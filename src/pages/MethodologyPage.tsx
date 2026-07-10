@@ -89,6 +89,18 @@ export function MethodologyPage() {
         </CaveatCard>
       ))}
 
+      <H2>How hardware is classified</H2>
+      <P>
+        Each run&apos;s fingerprint records raw facts per node (accelerator vendor, total memory).
+        At import those map to canonical classes: vendor plus the nearest standard memory tier, so
+        a node reporting 61GiB usable reads as AMD 64GB. A run&apos;s hardware is the multiset of
+        its node classes; a model&apos;s hardware is the classes of the nodes that actually served
+        it where the run recorded placement (marked exact), or the whole-cluster shape otherwise
+        (marked cluster). Runs that predate hardware fingerprints show as unknown hardware rather
+        than being guessed. Classification lives in the site importer, not the harness, so a
+        taxonomy fix reclassifies all history on the next rebuild.
+      </P>
+
       <H2>Where the data comes from</H2>
       <P>
         Each run is a set of harness artifacts (a machine-readable report, an event log, a summary).

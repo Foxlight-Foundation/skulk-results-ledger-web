@@ -78,11 +78,15 @@ export function ModelPage() {
       render: (t) => t.sampleCount,
     },
     {
-      key: 'nodes',
-      header: 'Nodes',
-      align: 'center',
-      sortValue: (t) => t.nodeCount,
-      render: (t) => t.nodeCount || '—',
+      key: 'hardware',
+      header: 'Hardware',
+      sortValue: (t) => (t.hardware.known ? t.hardware.label : ''),
+      render: (t) =>
+        t.hardware.known ? (
+          <span style={{ whiteSpace: 'nowrap' }}>{t.hardware.label}</span>
+        ) : (
+          <Muted>{t.nodeCount ? `${t.nodeCount} nodes` : 'unknown'}</Muted>
+        ),
     },
     {
       key: 'version',
@@ -118,6 +122,13 @@ export function ModelPage() {
           {data.nodeCountsObserved.length > 0 && (
             <Chip>{data.nodeCountsObserved.join('/')}-node</Chip>
           )}
+          {data.hardwareCells
+            .filter((c) => c.classes.some((x) => x !== 'unknown'))
+            .map((c) => (
+              <Chip key={c.label} $tone="cyan">
+                {c.label}
+              </Chip>
+            ))}
           <Muted>{data.modelId}</Muted>
         </Row>
       </Header>

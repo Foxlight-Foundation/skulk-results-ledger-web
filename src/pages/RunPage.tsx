@@ -86,6 +86,27 @@ export function RunPage() {
       render: (m) => formatSeconds(m.ttft.median),
     },
     {
+      key: 'hardware',
+      header: 'Hardware',
+      sortValue: (m) => (m.hardware.known ? m.hardware.label : ''),
+      render: (m) =>
+        m.hardware.known ? (
+          <span
+            style={{ whiteSpace: 'nowrap' }}
+            title={
+              m.hardwareAttribution === 'placement'
+                ? 'Exact: from this run\u2019s recorded placement nodes'
+                : 'Whole-cluster shape; placement nodes not recorded'
+            }
+          >
+            {m.hardware.label}
+            {m.hardwareAttribution === 'cluster' && <Muted> (cluster)</Muted>}
+          </span>
+        ) : (
+          <Muted>unknown</Muted>
+        ),
+    },
+    {
       key: 'samples',
       header: 'Samples',
       align: 'center',
@@ -123,6 +144,7 @@ export function RunPage() {
         <Chip $tone="neutral">{data.mode}</Chip>
         <Chip $tone="neutral">{data.cacheClass} cache</Chip>
         {data.topologyLabel && <Chip>{data.topologyLabel}</Chip>}
+        {data.hardware.known && <Chip $tone="cyan">{data.hardware.label}</Chip>}
         <CaveatList caveats={data.caveats} />
       </Row>
 

@@ -24,6 +24,9 @@ import type {
   CacheClass,
   Caveat,
   EngineFamily,
+  HardwareAttribution,
+  HardwareCell,
+  HardwareProfile,
   LedgerIndex,
   MetricAggregate,
   ModelHistory,
@@ -36,6 +39,7 @@ import type {
   SuiteRollup,
 } from '../src/data/schema.ts';
 import { LEDGER_SCHEMA_VERSION } from '../src/data/schema.ts';
+import { profileOf, UNKNOWN_HARDWARE } from './hardware-taxonomy.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..');
@@ -230,9 +234,26 @@ function buildRunDetail(report: RawReport, redact: boolean): RunDetail {
   const fp = report.fingerprint;
   const results = report.results ?? [];
   const placementNodes = new Map<string, number>();
+  const placementNodeIds = new Map<string, string[]>();
   for (const p of report.placements ?? []) {
-    if (p.node_ids && p.node_ids.length) placementNodes.set(p.model_id, p.node_ids.length);
+    if (p.node_ids && p.node_ids.length) {
+      placementNodes.set(p.model_id, p.node_ids.length);
+      placementNodeIds.set(p.model_id, p.node_ids);
+    }
   }
+
+  // Hardware classification happens BEFORE redaction (it needs real node ids
+  // to join placements to fingerprint nodes); only the derived class/label
+  // survives into the output, which carries nothing operator-identifying.
+  const nodeById = new Map(nodes.map((n) => [n.nodeId, n]));
+  const clusterHardware = nodes.length ? profileOf(nodes) : UNKNOWN_HARDWARE;
+  const modelHardware = (modelId: string): { hardware: HardwareProfile; attribution: HardwareAttribution } => {
+    const ids = placementNodeIds.get(modelId);
+    const placed = ids?.map((id) => nodeById.get(id)).filter((n): n is NodeInfo => n != null) ?? [];
+    if (placed.length > 0) return { hardware: profileOf(placed), attribution: 'placement' };
+    if (nodes.length > 0) return { hardware: clusterHardware, attribution: 'cluster' };
+    return { hardware: UNKNOWN_HARDWARE, attribution: 'unknown' };
+  };
 
   const byModel = new Map<string, RawResult[]>();
   for (const r of results) {
@@ -249,6 +270,7 @@ function buildRunDetail(report: RawReport, redact: boolean): RunDetail {
     const failCount = rs.length - passCount;
     const issueCount = rs.reduce((n, r) => n + (r.issues?.length ?? 0), 0);
     const reps = new Set(rs.map((r) => r.repetition)).size;
+    const { hardware, attribution } = modelHardware(modelId);
     models.push({
       modelId,
       passCount,
@@ -258,6 +280,8 @@ function buildRunDetail(report: RawReport, redact: boolean): RunDetail {
       decodeTps: decode,
       ttft,
       caveats: modelCaveats(decode, failCount, issueCount, reps),
+      hardware,
+      hardwareAttribution: attribution,
     });
   }
   models.sort((a, b) => a.modelId.localeCompare(b.modelId));
@@ -301,6 +325,7 @@ function buildRunDetail(report: RawReport, redact: boolean): RunDetail {
     hasFingerprint,
     runReason: fp?.source_context?.run_reason ?? null,
     caveats: runCaveats,
+    hardware: clusterHardware,
     nodes: redact
       ? nodes.map((n) => ({ ...n, friendlyName: null, nodeId: shortHash(n.nodeId) }))
       : nodes,
@@ -360,8 +385,35 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
         passRate: total ? result.passCount / total : 0,
         caveats: result.caveats,
         credible,
+        hardware: result.hardware,
       };
     });
+
+    // One aggregate cell per distinct hardware shape this model was served on
+    // (exact placement shapes where recorded, cluster shapes otherwise, plus
+    // an explicit unknown cell for pre-fingerprint history). Same credibility
+    // bar as the headline: typical = median of credible per-run medians.
+    const byHardware = new Map<string, { entry: (typeof entries)[number]; point: ModelTimePoint }[]>();
+    timeline.forEach((point, i) => {
+      const arr = byHardware.get(point.hardware.label) ?? [];
+      arr.push({ entry: entries[i], point });
+      byHardware.set(point.hardware.label, arr);
+    });
+    const hardwareCells: HardwareCell[] = [...byHardware.entries()].map(([label, cells]) => {
+      const crediblePoints = cells.filter((c) => c.point.credible && c.point.decodeTpsMedian != null);
+      const cellResults = cells.reduce((n, c) => n + c.entry.result.passCount + c.entry.result.failCount, 0);
+      const cellPass = cells.reduce((n, c) => n + c.entry.result.passCount, 0);
+      return {
+        label,
+        classes: cells[0].point.hardware.classes,
+        runCount: cells.length,
+        credibleRunCount: crediblePoints.length,
+        decodeTpsTypical: median(crediblePoints.map((c) => c.point.decodeTpsMedian as number)),
+        passRate: cellResults ? cellPass / cellResults : 0,
+        lastRunAt: cells.map((c) => c.point.startedAt).filter((v): v is string => v != null).sort().at(-1) ?? null,
+      };
+    });
+    hardwareCells.sort((a, b) => b.runCount - a.runCount);
 
     // Headline numbers rest on credible points only: a single-rep wall spike
     // (e.g. a 5-token "415 tok/s") can never set the record.
@@ -390,6 +442,7 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
       nodeCountsObserved: nodeCounts,
       lastRunAt: latest?.detail.startedAt ?? null,
       caveats: [...new Set(entries.flatMap((e) => e.result.caveats))],
+      hardwareCells,
       timeline,
     });
   }
@@ -513,6 +566,12 @@ export function runImport({ runs, out, redact }: ImportOptions): string {
   const skulkVersions = [
     ...new Set(details.map((d) => d.skulkVersion).filter((v): v is string => v != null)),
   ].sort();
+  const hardwareLabels = [
+    ...new Set([
+      ...details.filter((d) => d.hardware.known).map((d) => d.hardware.label),
+      ...histories.flatMap((h) => h.hardwareCells.filter((c) => c.classes.some((x) => x !== 'unknown')).map((c) => c.label)),
+    ]),
+  ].sort();
 
   const index: LedgerIndex = {
     schemaVersion: LEDGER_SCHEMA_VERSION,
@@ -523,6 +582,7 @@ export function runImport({ runs, out, redact }: ImportOptions): string {
     modelCount: histories.length,
     suiteCount: suites.length,
     skulkVersions,
+    hardwareLabels,
     runs: details.map(toSummary),
     models: histories.map(toRollup),
     suites,
