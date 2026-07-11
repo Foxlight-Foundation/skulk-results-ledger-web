@@ -26,6 +26,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      # R2 enabled on the account 2026-07-10. The bucket holds Phase 4 crash
+      # diagnostics (64KB payloads, retention deletes); submission blobs stay
+      # in D1 deliberately (3KB rows, one query, no per-row subrequest fan-out
+      # in bake-export).
+      - name: Ensure R2 bucket exists
+        working-directory: ingest
+        run: |
+          if ! npx --yes wrangler@3 r2 bucket list | grep -q "skulk-ledger-submissions"; then
+            npx --yes wrangler@3 r2 bucket create skulk-ledger-submissions
+          else
+            echo "bucket present"
+          fi
+
       - name: Apply D1 schema
         working-directory: ingest
         run: npx --yes wrangler@3 d1 execute skulk-ledger --remote --file=schema.sql
