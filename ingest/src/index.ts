@@ -219,7 +219,10 @@ function normalizeSample(sample: unknown):
   if (typeof sample !== 'object' || sample == null) return 'sample is not an object';
   const s = sample as Record<string, unknown>;
   if (typeof s.kind !== 'string' || !TELEMETRY_KINDS.has(s.kind)) return 'unknown kind';
+  // Canonicalize to UTC ISO so TEXT ordering equals instant ordering
+  // (an offset timestamp like 01:00:00+02:00 must not sort after 00:30Z).
   if (typeof s.at !== 'string' || Number.isNaN(Date.parse(s.at))) return 'bad timestamp';
+  const at = new Date(s.at).toISOString();
   const modelId =
     typeof s.model_id === 'string' && s.model_id.length > 0 && s.model_id.length <= 200
       ? s.model_id
@@ -237,7 +240,7 @@ function normalizeSample(sample: unknown):
     typeof s.error_class === 'string' && ERROR_CLASSES.has(s.error_class) ? s.error_class : null;
   return {
     kind: s.kind,
-    at: s.at,
+    at,
     modelId,
     engine,
     quantization,
@@ -345,10 +348,23 @@ async function handleTelemetry(request: Request, env: Env): Promise<Response> {
  */
 async function handleTelemetryDelete(env: Env, installId: string): Promise<Response> {
   if (!INSTALL_ID_RE.test(installId)) return json({ error: 'install_id must be a lowercase UUID' }, 400);
-  const result = await env.DB.prepare('DELETE FROM telemetry_samples WHERE install_id = ?')
-    .bind(installId)
-    .run();
-  return json({ deleted: result.meta?.changes ?? 0 });
+  // Paged: a busy install can hold hundreds of thousands of rows, and a
+  // single unbounded DELETE can exceed D1 execution limits. When the page
+  // budget runs out, `remaining: true` tells the client to call again.
+  let deleted = 0;
+  let remaining = false;
+  for (let page = 0; page < 20; page += 1) {
+    const result = await env.DB.prepare(
+      'DELETE FROM telemetry_samples WHERE id IN (SELECT id FROM telemetry_samples WHERE install_id = ? LIMIT 10000)',
+    )
+      .bind(installId)
+      .run();
+    const changes = result.meta?.changes ?? 0;
+    deleted += changes;
+    if (changes < 10000) break;
+    if (page === 19) remaining = true;
+  }
+  return json({ deleted, remaining });
 }
 
 export default {
