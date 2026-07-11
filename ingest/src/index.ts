@@ -194,6 +194,9 @@ const ERROR_CLASSES = new Set([
   'generation-error',
 ]);
 const ENGINES = new Set(['mlx', 'llama_cpp', 'llama_server', 'mlx_audio']);
+// Hugging-Face-repo shape: one optional org segment, restricted charset, no
+// leading slash. Blocks paths, notes, and prompt text from riding model_id.
+const MODEL_ID_RE = /^[A-Za-z0-9._-]{1,96}(\/[A-Za-z0-9._-]{1,96})?$/;
 
 function finiteOrNull(value: unknown, min: number, max: number): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max
@@ -224,9 +227,7 @@ function normalizeSample(sample: unknown):
   if (typeof s.at !== 'string' || Number.isNaN(Date.parse(s.at))) return 'bad timestamp';
   const at = new Date(s.at).toISOString();
   const modelId =
-    typeof s.model_id === 'string' && s.model_id.length > 0 && s.model_id.length <= 200
-      ? s.model_id
-      : null;
+    typeof s.model_id === 'string' && MODEL_ID_RE.test(s.model_id) ? s.model_id : null;
   if (s.kind === 'generation' && !modelId) return 'generation sample without model_id';
   const engine = typeof s.engine === 'string' && ENGINES.has(s.engine) ? s.engine : null;
   const quantization =
