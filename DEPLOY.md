@@ -25,11 +25,16 @@ pushes the new runs to `skulk-results-data`, triggers an immediate Pages rebuild
 so disk does not grow without bound. It never fails the battery and skips
 stability-suite / failed / no-result runs.
 
-It is **off unless enabled**, by either:
+It is **on by default** and turned off only intentionally, by either:
 
-- a `.autopublish-results` marker file at the harness repo root (gitignored;
-  the "this is my publishing machine" switch, created once), **or**
-- `SKULK_PUBLISH_RESULTS=1` in the environment.
+- a `.autopublish-results-off` marker file at the harness repo root (gitignored;
+  the "hold publishing on this machine" switch, e.g. while dev churn should stay
+  out of the public ledger), **or**
+- `SKULK_PUBLISH_RESULTS=0` in the environment.
+
+`SKULK_PUBLISH_RESULTS=1` forces publishing on past the off-marker. Machines
+without the sibling repo checkouts (cluster nodes, CI) skip automatically, so
+default-on cannot publish from a machine that was never set up to publish.
 
 Repo paths default to the sibling `skulk-results-data` / `skulk-results-ledger-web`
 checkouts; override with `SKULK_RESULTS_DATA_DIR` / `SKULK_RESULTS_WEB_DIR`. The
