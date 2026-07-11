@@ -189,11 +189,20 @@ const ERROR_CLASSES = new Set([
   'timeout',
   'wedge-detected',
   'oom',
+  // The API-node stream tap knows "the generation errored" without the
+  // underlying class; an honest catch-all beats a guessed specific one.
+  'generation-error',
 ]);
 const ENGINES = new Set(['mlx', 'llama_cpp', 'llama_server', 'mlx_audio']);
 
 function finiteOrNull(value: unknown, min: number, max: number): number | null {
   return typeof value === 'number' && Number.isFinite(value) && value >= min && value <= max
+    ? value
+    : null;
+}
+
+function intOrNull(value: unknown, min: number, max: number): number | null {
+  return typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max
     ? value
     : null;
 }
@@ -233,11 +242,11 @@ function normalizeSample(sample: unknown):
     engine,
     quantization,
     hardware,
-    nodeCount: finiteOrNull(s.node_count, 1, 1024),
+    nodeCount: intOrNull(s.node_count, 1, 1024),
     ttftS: finiteOrNull(s.ttft_s, 0, 3600),
     decodeTps: finiteOrNull(s.decode_tps, 0, 100_000),
-    promptTokens: finiteOrNull(s.prompt_tokens, 0, 10_000_000),
-    outputTokens: finiteOrNull(s.output_tokens, 0, 10_000_000),
+    promptTokens: intOrNull(s.prompt_tokens, 0, 10_000_000),
+    outputTokens: intOrNull(s.output_tokens, 0, 10_000_000),
     mtpAcceptRatio: finiteOrNull(s.mtp_accept_ratio, 0, 1),
     errorClass,
   };
@@ -251,6 +260,9 @@ async function handleTelemetry(request: Request, env: Env): Promise<Response> {
     batch = JSON.parse(body);
   } catch {
     return json({ error: 'body is not valid JSON' }, 400);
+  }
+  if (typeof batch !== 'object' || batch == null || Array.isArray(batch)) {
+    return json({ error: 'body must be a JSON object' }, 400);
   }
   const b = batch as {
     install_id?: unknown;
