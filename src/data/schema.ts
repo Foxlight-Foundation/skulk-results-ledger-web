@@ -98,6 +98,8 @@ export interface NodeInfo {
   friendlyName: string | null;
   ramTotalBytes: number | null;
   acceleratorVendor: string | null;
+  /** Marketing name of the accelerator (e.g. `NVIDIA A40`), null when unmeasured. */
+  acceleratorName: string | null;
   skulkVersion: string | null;
 }
 
