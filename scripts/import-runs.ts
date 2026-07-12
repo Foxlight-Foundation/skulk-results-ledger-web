@@ -86,6 +86,7 @@ interface RawNode {
   friendly_name?: string | null;
   ram_total_bytes?: number | null;
   accelerator_vendor?: string | null;
+  accelerator_name?: string | null;
   skulk_version?: string | null;
 }
 interface RawFingerprint {
@@ -213,6 +214,7 @@ function nodesFrom(report: RawReport): NodeInfo[] {
     friendlyName: n.friendly_name ?? null,
     ramTotalBytes: n.ram_total_bytes ?? null,
     acceleratorVendor: n.accelerator_vendor ?? null,
+    acceleratorName: n.accelerator_name ?? null,
     skulkVersion: n.skulk_version ?? null,
   }));
 }
