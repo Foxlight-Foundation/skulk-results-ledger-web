@@ -7,7 +7,7 @@ import { SpeedScatter } from '../components/charts/SpeedScatter';
 import { Eyebrow, Muted, Page, Panel, Row } from '../components/primitives';
 import { SortableTable, type Column } from '../components/SortableTable';
 import { EmptyState, ErrorState, LoadingState } from '../components/States';
-import type { EngineFamily, ModelRollup } from '../data/schema';
+import type { Caveat, EngineFamily, ModelRollup } from '../data/schema';
 import { FAMILY_META, formatSeconds, formatTps } from '../data/format';
 import { useIndex } from '../data/useLedger';
 import { useWindow } from '../data/useWindow';
@@ -165,6 +165,12 @@ export function ExplorerPage() {
         continue;
       }
       if (hardware !== 'all' && !w.hardwareCells.some((c) => c.label === hardware)) continue;
+      // Recompute the has_failures caveat from the window so it cannot
+      // contradict the windowed pass rate (a row showing 100% pass in the
+      // period must not still wear an all-time "failures" chip). Other caveats
+      // are data-provenance notes that remain true about the model.
+      const caveats: Caveat[] = m.caveats.filter((c) => c !== 'has_failures');
+      if (w.hasFailuresInWindow) caveats.push('has_failures');
       visible.push({
         ...m,
         decodeTpsTypical: w.decodeTpsTypical,
@@ -175,6 +181,7 @@ export function ExplorerPage() {
         runCount: w.runCountInWindow,
         communityRunCount: w.communityRunCount,
         passRate: w.passRate,
+        caveats,
       });
     }
     visible.sort((a, b) => (b.decodeTpsTypical ?? -1) - (a.decodeTpsTypical ?? -1));
