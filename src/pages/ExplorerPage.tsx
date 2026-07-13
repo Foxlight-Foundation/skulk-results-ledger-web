@@ -182,6 +182,7 @@ export function ExplorerPage() {
         communityRunCount: w.communityRunCount,
         passRate: w.passRate,
         caveats,
+        nodeCountsObserved: w.nodeCountsObserved,
       });
     }
     visible.sort((a, b) => (b.decodeTpsTypical ?? -1) - (a.decodeTpsTypical ?? -1));
