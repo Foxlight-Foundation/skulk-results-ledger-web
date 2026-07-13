@@ -204,6 +204,11 @@ export interface WindowPoint {
    * recorded); preserves the Hardware page's cluster-fallback asterisk under a
    * window. */
   clusterAttributed: boolean;
+  /** Passed result count for this run, so windowed pass rate can be summed
+   * (a ratio can't be re-aggregated across runs; counts can). */
+  passCount: number;
+  /** Failed result count for this run. */
+  failCount: number;
 }
 
 export interface ModelRollup {

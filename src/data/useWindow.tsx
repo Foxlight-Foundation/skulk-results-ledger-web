@@ -1,8 +1,13 @@
 /**
  * Shared time-window selection for the ledger. One provider at the app root
  * holds the selected window so it persists across navigation (switching
- * Explorer <-> Runs keeps the window) and across reloads (localStorage). See
- * window.ts for the re-aggregation logic the pages apply.
+ * Explorer <-> Runs keeps the window) and across reloads within the same tab.
+ *
+ * Persistence is scoped to the tab/window lifespan (sessionStorage), not
+ * forever: a change sticks while the visitor is exploring, but a fresh visit
+ * lands back on the honest DEFAULT_WINDOW instead of a stale "All-time" lens
+ * pinned on an earlier visit. Each tab is independent. See window.ts for the
+ * re-aggregation logic the pages apply.
  */
 
 import { createContext, useCallback, useContext, useMemo, useState } from 'react';
@@ -25,9 +30,9 @@ interface WindowContextValue {
 const WindowContext = createContext<WindowContextValue | null>(null);
 
 function readStored(): TimeWindow {
-  if (typeof localStorage === 'undefined') return DEFAULT_WINDOW;
+  if (typeof sessionStorage === 'undefined') return DEFAULT_WINDOW;
   try {
-    return windowFromParam(localStorage.getItem(STORAGE_KEY));
+    return windowFromParam(sessionStorage.getItem(STORAGE_KEY));
   } catch {
     return DEFAULT_WINDOW;
   }
@@ -41,7 +46,7 @@ export function WindowProvider({ children }: { children: ReactNode }) {
   const setWindow = useCallback((w: TimeWindow) => {
     setWindowState(w);
     try {
-      localStorage.setItem(STORAGE_KEY, windowToParam(w));
+      sessionStorage.setItem(STORAGE_KEY, windowToParam(w));
     } catch {
       // Private mode / storage disabled: selection still works for the session.
     }

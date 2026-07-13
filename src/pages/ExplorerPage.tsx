@@ -174,6 +174,7 @@ export function ExplorerPage() {
         credibleRunCount: w.credibleRunCount,
         runCount: w.runCountInWindow,
         communityRunCount: w.communityRunCount,
+        passRate: w.passRate,
       });
     }
     visible.sort((a, b) => (b.decodeTpsTypical ?? -1) - (a.decodeTpsTypical ?? -1));

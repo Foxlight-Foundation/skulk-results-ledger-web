@@ -83,6 +83,9 @@ export interface WindowedRollup {
   ttftLatestMedian: number | null;
   /** Community points in the window (kept separate from headline). */
   communityRunCount: number;
+  /** Pass rate across all results in the window (importer parity: every point,
+   * both tiers), 0 when the window has no results. */
+  passRate: number;
   /** Per-hardware cells recomputed for the window (foxlight, credible). */
   hardwareCells: HardwareCell[];
   /** False when NO points fell in the window: the row should be hidden, and
@@ -125,20 +128,25 @@ export function windowRollup(
           .filter((v): v is string => v != null)
           .sort()
           .at(-1) ?? null;
+      const cellResults = cells.reduce((n, c) => n + c.passCount + c.failCount, 0);
+      const cellPass = cells.reduce((n, c) => n + c.passCount, 0);
       return {
         label,
         classes: cells[0].hardwareClasses,
         runCount: cells.length,
         credibleRunCount: credible.length,
         decodeTpsTypical: median(credible.map((c) => c.decodeTpsMedian as number)),
-        // Pass rate is not carried on window points; the windowed cell is a
-        // throughput view. The all-time cell retains the pass rate.
-        passRate: 0,
+        passRate: cellResults ? cellPass / cellResults : 0,
         lastRunAt,
         clusterAttributedRunCount: cells.filter((c) => c.clusterAttributed).length,
       };
     })
     .sort((a, b) => b.runCount - a.runCount);
+
+  // Model-level pass rate mirrors the importer: summed across every point in
+  // the window (both tiers), not just the credible foxlight headline base.
+  const totalResults = inWindow.reduce((n, p) => n + p.passCount + p.failCount, 0);
+  const totalPass = inWindow.reduce((n, p) => n + p.passCount, 0);
 
   return {
     runCountInWindow: inWindow.length,
@@ -147,6 +155,7 @@ export function windowRollup(
     decodeTpsLatest: latest?.decodeTpsMedian ?? null,
     ttftLatestMedian: latest?.ttftMedian ?? null,
     communityRunCount: inWindow.filter((p) => p.tier === 'community').length,
+    passRate: totalResults ? totalPass / totalResults : 0,
     hardwareCells,
     hasWindowData: inWindow.length > 0,
   };

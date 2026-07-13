@@ -127,7 +127,7 @@ export function ModelPage() {
         <Name>{data.displayName}</Name>
         <Row $gap="8px" $wrap style={{ marginTop: 12 }}>
           <FamilyBadge family={data.family} />
-          <PassRateChip passRate={data.passRate} />
+          <PassRateChip passRate={w.passRate} />
           {data.nodeCountsObserved.length > 0 && (
             <Chip>{data.nodeCountsObserved.join('/')}-node</Chip>
           )}
