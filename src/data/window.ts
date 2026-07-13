@@ -86,6 +86,10 @@ export interface WindowedRollup {
   /** Pass rate across all results in the window (importer parity: every point,
    * both tiers), 0 when the window has no results. */
   passRate: number;
+  /** True when any run in the window had a failed result. Lets a windowed view
+   * recompute the `has_failures` caveat instead of carrying the all-time one,
+   * which would otherwise contradict a windowed 100% pass rate. */
+  hasFailuresInWindow: boolean;
   /** Per-hardware cells recomputed for the window (foxlight, credible). */
   hardwareCells: HardwareCell[];
   /** False when NO points fell in the window: the row should be hidden, and
@@ -156,6 +160,7 @@ export function windowRollup(
     ttftLatestMedian: latest?.ttftMedian ?? null,
     communityRunCount: inWindow.filter((p) => p.tier === 'community').length,
     passRate: totalResults ? totalPass / totalResults : 0,
+    hasFailuresInWindow: totalResults - totalPass > 0,
     hardwareCells,
     hasWindowData: inWindow.length > 0,
   };

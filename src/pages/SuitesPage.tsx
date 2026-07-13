@@ -45,11 +45,14 @@ export function SuitesPage() {
 
   // Recompute each suite's stats for the selected period from the run
   // summaries (which carry test set / timestamp / pass-fail counts). Distinct
-  // models-covered is not reconstructable per suite from the index, so the
-  // coverage proxy is the largest single run's model count in the window
-  // (period-accurate, never overstated).
+  // models-covered cannot be reconstructed per window from the index (run rows
+  // do not carry model ids), so for a narrowed period the coverage figure is a
+  // proxy: the largest single run's model count in the window (period-accurate,
+  // never overstated). For the All period it uses the importer's exact distinct
+  // union from the baked suite rollup, so All matches the baked data.
   const suites = useMemo(() => {
     if (!data) return [];
+    const bakedModelCount = new Map(data.suites.map((s) => [s.testSet, s.modelCount]));
     const byTest = new Map<string, typeof data.runs>();
     for (const r of data.runs) {
       if (!isWithinWindow(r.finishedAt ?? r.startedAt, window, now)) continue;
@@ -67,10 +70,14 @@ export function SuitesPage() {
             .filter((v): v is string => v != null)
             .sort()
             .at(-1) ?? null;
+        const modelCount =
+          window == null
+            ? bakedModelCount.get(testSet) ?? runs.reduce((mx, r) => Math.max(mx, r.modelCount), 0)
+            : runs.reduce((mx, r) => Math.max(mx, r.modelCount), 0);
         return {
           testSet,
           runCount: runs.length,
-          modelCount: runs.reduce((mx, r) => Math.max(mx, r.modelCount), 0),
+          modelCount,
           totalResults,
           passRate: totalResults ? pass / totalResults : 0,
           lastRunAt,
