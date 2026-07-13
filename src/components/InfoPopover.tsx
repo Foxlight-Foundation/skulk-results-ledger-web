@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import styled from 'styled-components';
 
@@ -74,9 +74,37 @@ export interface InfoPopoverProps {
 export function InfoPopover({ label, children }: InfoPopoverProps) {
   const [hovered, setHovered] = useState(false);
   const [pinned, setPinned] = useState(false);
+  const [shiftX, setShiftX] = useState(0);
   const wrapRef = useRef<HTMLSpanElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const panelId = useId();
   const open = hovered || pinned;
+
+  // The panel is left-anchored to the icon, so on a right-column card or a
+  // narrow/touch viewport it can extend past the right edge and clip its own
+  // text. Once shown, measure it and nudge it left by exactly the overflow so
+  // it stays on screen. max-width already caps it below the viewport width, so
+  // a single leftward shift cannot push the left edge off-screen. Re-measured
+  // on open and on resize (orientation change on mobile).
+  useLayoutEffect(() => {
+    if (!open) {
+      setShiftX(0);
+      return;
+    }
+    const measure = () => {
+      const panel = panelRef.current;
+      if (!panel) return;
+      const margin = 8;
+      // Neutralize any current shift before measuring the natural position.
+      panel.style.transform = '';
+      const rect = panel.getBoundingClientRect();
+      const overflowRight = rect.right - (window.innerWidth - margin);
+      setShiftX(overflowRight > 0 ? -Math.ceil(overflowRight) : 0);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [open]);
 
   useEffect(() => {
     if (!pinned) return;
@@ -114,7 +142,12 @@ export function InfoPopover({ label, children }: InfoPopoverProps) {
         i
       </Trigger>
       {open && (
-        <Panel id={panelId} role="note">
+        <Panel
+          id={panelId}
+          ref={panelRef}
+          role="note"
+          style={shiftX ? { transform: `translateX(${shiftX}px)` } : undefined}
+        >
           {children}
         </Panel>
       )}
