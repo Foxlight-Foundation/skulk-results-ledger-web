@@ -323,7 +323,12 @@ function buildRunDetail(
     mode: report.spec.mode,
     modelSet: report.spec.model_set,
     testSet: report.spec.test_set,
-    testSetDescription: report.test_set_description ?? '',
+    // Guard against a non-string value in raw JSON (a malformed community
+    // report): the raw type is not validated, and buildSuites later calls
+    // .trim() on this, so a single bad field would throw and block the whole
+    // bake/deploy. Coerce anything non-string to empty.
+    testSetDescription:
+      typeof report.test_set_description === 'string' ? report.test_set_description : '',
     runName: redact ? null : report.spec.run_name ?? null,
     passCount,
     failCount,
