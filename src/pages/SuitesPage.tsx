@@ -23,6 +23,15 @@ const Sub = styled.p`
 
 const Card = styled(Panel)`
   padding: ${({ theme }) => theme.spacing.lg};
+  /* Each card is its own stacking context (backdrop-filter), so a popover
+   * inside one card would otherwise paint behind later sibling cards no matter
+   * its own z-index. Lift the whole card above its siblings while its info
+   * popover is open (hover, or focused/pinned after a click/tap). */
+  position: relative;
+  &:hover,
+  &:focus-within {
+    z-index: 50;
+  }
 `;
 
 const SuiteHeader = styled(Row)`
