@@ -10,6 +10,9 @@ import { EmptyState, ErrorState, LoadingState } from '../components/States';
 import type { EngineFamily, ModelRollup } from '../data/schema';
 import { FAMILY_META, formatSeconds, formatTps } from '../data/format';
 import { useIndex } from '../data/useLedger';
+import { useWindow } from '../data/useWindow';
+import { windowRollup } from '../data/window';
+import { TimeWindowControl } from '../components/TimeWindowControl';
 
 const Hero = styled.header`
   padding: ${({ theme }) => `${theme.spacing.xl} 0 ${theme.spacing.lg}`};
@@ -102,6 +105,13 @@ const SectionLabel = styled.h2`
   margin: ${({ theme }) => theme.spacing.xl} 0 ${({ theme }) => theme.spacing.md};
 `;
 
+const HiddenNote = styled.p`
+  margin: 0 0 ${({ theme }) => theme.spacing.md};
+  font-family: ${({ theme }) => theme.typography.fontFamily.mono};
+  font-size: ${({ theme }) => theme.typography.fontSize.eyebrow};
+  color: ${({ theme }) => theme.colors.text3};
+`;
+
 const FAMILIES: (EngineFamily | 'all')[] = ['all', 'mlx', 'llama_cpp'];
 
 const HardwareSelect = styled.select`
@@ -133,15 +143,43 @@ export function ExplorerPage() {
   const [hardware, setHardware] = useState('all');
   const [query, setQuery] = useState('');
 
-  const models = useMemo(() => {
-    if (!data) return [];
-    return data.models.filter((m) => {
+  const { window, now } = useWindow();
+
+  // Window each rollup's headline medians and cells, then apply filters. The
+  // windowed decodeTpsTypical / ttft / hardwareCells / counts override the
+  // all-time baked values so every number reflects the selected period; a
+  // model with no runs in the window is hidden (its absence is bound to the
+  // period, not "never tested"), and counted for the indicator below.
+  const { models, hiddenByWindow } = useMemo(() => {
+    if (!data) return { models: [] as ModelRollup[], hiddenByWindow: 0 };
+    const base = data.models.filter((m) => {
       if (family !== 'all' && m.family !== family) return false;
-      if (hardware !== 'all' && !m.hardwareCells.some((c) => c.label === hardware)) return false;
       if (query && !m.displayName.toLowerCase().includes(query.toLowerCase())) return false;
       return true;
     });
-  }, [data, family, hardware, query]);
+    const visible: ModelRollup[] = [];
+    let hidden = 0;
+    for (const m of base) {
+      const w = windowRollup(m, window, now);
+      if (!w.hasWindowData) {
+        hidden += 1;
+        continue;
+      }
+      if (hardware !== 'all' && !w.hardwareCells.some((c) => c.label === hardware)) continue;
+      visible.push({
+        ...m,
+        decodeTpsTypical: w.decodeTpsTypical,
+        decodeTpsLatest: w.decodeTpsLatest,
+        ttftLatestMedian: w.ttftLatestMedian,
+        hardwareCells: w.hardwareCells,
+        credibleRunCount: w.credibleRunCount,
+        runCount: w.runCountInWindow,
+        communityRunCount: w.communityRunCount,
+      });
+    }
+    visible.sort((a, b) => (b.decodeTpsTypical ?? -1) - (a.decodeTpsTypical ?? -1));
+    return { models: visible, hiddenByWindow: hidden };
+  }, [data, family, hardware, query, window, now]);
 
   if (loading) return <LoadingState />;
   if (error) return <ErrorState error={error} />;
@@ -246,6 +284,7 @@ export function ExplorerPage() {
       )}
 
       <Controls $gap="8px">
+        <TimeWindowControl />
         <Search
           placeholder="Filter models…"
           value={query}
@@ -267,8 +306,20 @@ export function ExplorerPage() {
       </Controls>
 
       <SectionLabel>All models</SectionLabel>
+      {hiddenByWindow > 0 && (
+        <HiddenNote>
+          {hiddenByWindow} {hiddenByWindow === 1 ? 'model' : 'models'} hidden with no runs in this
+          period. Widen the window to see them.
+        </HiddenNote>
+      )}
       {models.length === 0 ? (
-        <EmptyState label="No models match your filter." />
+        <EmptyState
+          label={
+            hiddenByWindow > 0
+              ? 'No runs in this period. Widen the window, or select All.'
+              : 'No models match your filter.'
+          }
+        />
       ) : (
         <SortableTable
           columns={columns}

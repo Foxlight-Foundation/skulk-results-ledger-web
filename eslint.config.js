@@ -6,10 +6,17 @@ import reactHooks from 'eslint-plugin-react-hooks';
 const browserGlobals = {
   window: 'readonly',
   document: 'readonly',
+  localStorage: 'readonly',
   fetch: 'readonly',
   console: 'readonly',
   setTimeout: 'readonly',
   clearTimeout: 'readonly',
+  // Type-position browser/React globals referenced across the components.
+  React: 'readonly',
+  HTMLElement: 'readonly',
+  HTMLDivElement: 'readonly',
+  SVGSVGElement: 'readonly',
+  MediaQueryListEvent: 'readonly',
 };
 
 const nodeGlobals = {

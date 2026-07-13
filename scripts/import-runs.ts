@@ -32,6 +32,7 @@ import type {
   MetricAggregate,
   ModelHistory,
   ModelRollup,
+  WindowPoint,
   ModelTimePoint,
   NodeInfo,
   RunDetail,
@@ -462,6 +463,17 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
       caveats: [...new Set(entries.flatMap((e) => e.result.caveats))],
       hardwareCells,
       communityRunCount: timeline.filter((t) => t.tier === 'community').length,
+      // Compact per-run points carried into the index rollup (toRollup keeps
+      // them, strips only `timeline`) so the site can re-aggregate any window.
+      windowPoints: timeline.map((t): WindowPoint => ({
+        startedAt: t.startedAt,
+        decodeTpsMedian: t.decodeTpsMedian,
+        ttftMedian: t.ttftMedian,
+        credible: t.credible,
+        tier: t.tier,
+        hardwareLabel: t.hardware.label,
+        hardwareClasses: t.hardware.classes,
+      })),
       timeline,
     });
   }

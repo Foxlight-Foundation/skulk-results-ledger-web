@@ -8,7 +8,7 @@
  * it is declared here; if the site reads a field, it is declared here.
  */
 
-export const LEDGER_SCHEMA_VERSION = '1.2';
+export const LEDGER_SCHEMA_VERSION = '1.3';
 
 /**
  * Provenance tier (the open-ledger's load-bearing concept): `foxlight` =
@@ -183,6 +183,25 @@ export interface ModelTimePoint {
 }
 
 /** Rollup card for one model in the explorer. */
+/**
+ * Compact per-run point carried in the index model rollups so the site can
+ * recompute headline medians for any selected time window WITHOUT loading each
+ * model's full history. Same credibility/tier rules as the baked aggregates
+ * apply when re-aggregating (see src/data/window.ts). Timestamps are the run's
+ * start (`startedAt`); a null timestamp is treated as always-in-window.
+ */
+export interface WindowPoint {
+  startedAt: string | null;
+  decodeTpsMedian: number | null;
+  ttftMedian: number | null;
+  credible: boolean;
+  tier: ProvenanceTier;
+  /** Hardware label for per-hardware cell grouping (matches HardwareProfile.label). */
+  hardwareLabel: string;
+  /** Canonical hardware classes, for class-level filtering parity with cells. */
+  hardwareClasses: string[];
+}
+
 export interface ModelRollup {
   modelId: string;
   slug: string;
@@ -209,6 +228,13 @@ export interface ModelRollup {
   caveats: Caveat[];
   /** Per-hardware aggregates (one cell per distinct hardware shape observed). */
   hardwareCells: HardwareCell[];
+  /**
+   * Compact per-run points for client-side time-window re-aggregation. Every
+   * run this rollup summarizes, newest last. The baked hardwareCells /
+   * decodeTpsTypical are the ALL-TIME view; window.ts recomputes them from
+   * these points for a selected window.
+   */
+  windowPoints: WindowPoint[];
   /**
    * Community runs observed for this model. Headline numbers
    * (decodeTpsTypical/Latest) and hardware cells rest on tier `foxlight`
