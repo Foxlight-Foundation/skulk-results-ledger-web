@@ -26,9 +26,11 @@ const Trigger = styled.button`
   height: 18px;
   padding: 0;
   border-radius: 50%;
-  border: 1px solid ${({ theme }) => theme.colors.border2};
+  /* Brighter than the faint border2/text3 defaults: the resting icon washed
+   * out against the starfield on the deployed site. */
+  border: 1px solid rgba(240, 237, 232, 0.24);
   background: transparent;
-  color: ${({ theme }) => theme.colors.text3};
+  color: ${({ theme }) => theme.colors.text2};
   font-family: ${({ theme }) => theme.typography.fontFamily.mono};
   font-size: 11px;
   line-height: 1;
