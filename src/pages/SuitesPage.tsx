@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import styled from 'styled-components';
 
 import { PassRateChip } from '../components/Chip';
+import { InfoPopover } from '../components/InfoPopover';
 import { BigNumber, Eyebrow, Grid, Muted, Page, Panel, Row } from '../components/primitives';
 import { EmptyState, ErrorState, LoadingState } from '../components/States';
 import { formatDate } from '../data/format';
@@ -24,12 +25,41 @@ const Card = styled(Panel)`
   padding: ${({ theme }) => theme.spacing.lg};
 `;
 
+const SuiteHeader = styled(Row)`
+  gap: 8px;
+  margin-bottom: ${({ theme }) => theme.spacing.md};
+`;
+
 const SuiteName = styled.h3`
   font-family: ${({ theme }) => theme.typography.fontFamily.mono};
   font-size: ${({ theme }) => theme.typography.fontSize.md};
   color: ${({ theme }) => theme.colors.text1};
-  margin-bottom: ${({ theme }) => theme.spacing.md};
   word-break: break-word;
+`;
+
+const PopTitle = styled.div`
+  font-weight: ${({ theme }) => theme.typography.fontWeight.semibold};
+  color: ${({ theme }) => theme.colors.text1};
+  margin-bottom: 2px;
+`;
+
+const PopCategory = styled.div`
+  font-family: ${({ theme }) => theme.typography.fontFamily.mono};
+  font-size: ${({ theme }) => theme.typography.fontSize.eyebrow};
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: ${({ theme }) => theme.colors.cyan};
+  margin-bottom: 8px;
+`;
+
+const PopDesc = styled.p`
+  color: ${({ theme }) => theme.colors.text2};
+  margin: 0 0 6px;
+`;
+
+const PopMeasures = styled.p`
+  color: ${({ theme }) => theme.colors.text3};
+  margin: 0;
 `;
 
 const Line = styled(Row)`
@@ -79,6 +109,14 @@ export function SuitesPage() {
       .sort((a, b) => b.runCount - a.runCount);
   }, [data, window, now]);
 
+  // Suite explanatory metadata (title / description / measures / category) is
+  // period-invariant and resolved at import onto the baked SuiteRollup, so read
+  // it from the index by name rather than recomputing it per window.
+  const metaByTestSet = useMemo(
+    () => new Map((data?.suites ?? []).map((s) => [s.testSet, s])),
+    [data],
+  );
+
   if (loading) return <LoadingState />;
   if (error) return <ErrorState error={error} />;
   if (!data) return <ErrorState error="No index." />;
@@ -88,16 +126,30 @@ export function SuitesPage() {
       <Eyebrow>Coverage</Eyebrow>
       <Title>Test suites</Title>
       <Sub>
-        Each suite is a named battery of assertions run against a set of models. Stats reflect the
-        selected period; pass rate is across the suite's results in that window.
+        Each suite is a named battery of assertions run against a set of models. Use the info icon
+        on a card to see what that suite measures. Stats reflect the selected period; pass rate is
+        across the suite's results in that window.
       </Sub>
       {suites.length === 0 ? (
         <EmptyState label="No suite runs in the selected period. Widen the window, or select All." />
       ) : (
       <Grid $min="300px">
-        {suites.map((s) => (
+        {suites.map((s) => {
+          const meta = metaByTestSet.get(s.testSet);
+          const hasInfo = meta && (meta.description || meta.measures);
+          return (
           <Card key={s.testSet}>
-            <SuiteName>{s.testSet}</SuiteName>
+            <SuiteHeader>
+              <SuiteName>{s.testSet}</SuiteName>
+              {hasInfo && (
+                <InfoPopover label={`About ${s.testSet}`}>
+                  {meta.title && <PopTitle>{meta.title}</PopTitle>}
+                  {meta.category && <PopCategory>{meta.category}</PopCategory>}
+                  {meta.description && <PopDesc>{meta.description}</PopDesc>}
+                  {meta.measures && <PopMeasures>{meta.measures}</PopMeasures>}
+                </InfoPopover>
+              )}
+            </SuiteHeader>
             <Row $justify="space-between">
               <div>
                 <BigNumber>{s.runCount}</BigNumber>
@@ -120,7 +172,8 @@ export function SuitesPage() {
               </Line>
             </div>
           </Card>
-        ))}
+          );
+        })}
       </Grid>
       )}
     </Page>

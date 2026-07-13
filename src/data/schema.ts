@@ -8,7 +8,7 @@
  * it is declared here; if the site reads a field, it is declared here.
  */
 
-export const LEDGER_SCHEMA_VERSION = '1.3';
+export const LEDGER_SCHEMA_VERSION = '1.4';
 
 /**
  * Provenance tier (the open-ledger's load-bearing concept): `foxlight` =
@@ -148,6 +148,12 @@ export interface RunModelResult {
 
 /** Full per-run detail file (`public/data/runs/<runId>.json`). */
 export interface RunDetail extends RunSummary {
+  /**
+   * The run's own test-set description, as emitted by the harness report
+   * (empty for reports predating that field). Kept on the detail file, not the
+   * index run rows, and used by the importer to resolve `SuiteRollup.description`.
+   */
+  testSetDescription: string;
   nodes: NodeInfo[];
   apiBaseUrl: string | null;
   repositories: { name: string; branch: string | null; commit: string | null }[];
@@ -266,6 +272,22 @@ export interface SuiteRollup {
   totalResults: number;
   passRate: number;
   lastRunAt: string | null;
+  /**
+   * Friendly title from the suite catalog (src/data/suite-catalog.ts). Null
+   * when the suite has no catalog entry (the card falls back to the raw name).
+   */
+  title: string | null;
+  /**
+   * One-line description of what the suite measures. Prefers the description a
+   * run's own report carries (self-describing runs, including community
+   * submissions and new suites), falling back to the catalog blurb. Null when
+   * neither source has one.
+   */
+  description: string | null;
+  /** Fuller "what it checks / what passing means" prose from the catalog. */
+  measures: string | null;
+  /** Coarse category from the catalog, for a grouping chip. Null when unknown. */
+  category: string | null;
 }
 
 /** The top-level index the site loads first (`public/data/index.json`). */
