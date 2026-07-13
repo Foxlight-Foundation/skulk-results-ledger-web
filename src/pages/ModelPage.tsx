@@ -128,8 +128,8 @@ export function ModelPage() {
         <Row $gap="8px" $wrap style={{ marginTop: 12 }}>
           <FamilyBadge family={data.family} />
           <PassRateChip passRate={w.passRate} />
-          {data.nodeCountsObserved.length > 0 && (
-            <Chip>{data.nodeCountsObserved.join('/')}-node</Chip>
+          {w.nodeCountsObserved.length > 0 && (
+            <Chip>{w.nodeCountsObserved.join('/')}-node</Chip>
           )}
           {w.hardwareCells
             .filter((c) => c.classes.some((x) => x !== 'unknown'))
