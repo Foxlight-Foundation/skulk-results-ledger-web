@@ -135,7 +135,7 @@ export function windowRollup(
         // throughput view. The all-time cell retains the pass rate.
         passRate: 0,
         lastRunAt,
-        clusterAttributedRunCount: 0,
+        clusterAttributedRunCount: cells.filter((c) => c.clusterAttributed).length,
       };
     })
     .sort((a, b) => b.runCount - a.runCount);

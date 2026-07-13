@@ -8,6 +8,8 @@ import { ErrorState, LoadingState } from '../components/States';
 import type { ModelRollup } from '../data/schema';
 import { formatTps } from '../data/format';
 import { useIndex } from '../data/useLedger';
+import { useWindow } from '../data/useWindow';
+import { isWithinWindow, windowRollup } from '../data/window';
 
 const Title = styled.h1`
   font-size: ${({ theme }) => theme.typography.fontSize.sectionH};
@@ -90,12 +92,21 @@ export function HardwarePage() {
   const { data, error, loading } = useIndex();
   const navigate = useNavigate();
 
+  const { window, now } = useWindow();
+
   const { labels, rows } = useMemo(() => {
     if (!data) return { labels: [] as string[], rows: [] as ModelRollup[] };
-    // Columns: known hardware shapes actually observed on model results,
-    // widest coverage first so the interesting columns lead.
+    // Window each model's per-hardware cells, then build the columns and rows
+    // from the windowed cells so the whole matrix reflects the selected period;
+    // a model with no windowed hardware cells drops out.
+    const windowed: ModelRollup[] = data.models.map((m) => ({
+      ...m,
+      hardwareCells: windowRollup(m, window, now).hardwareCells,
+    }));
+    // Columns: known hardware shapes actually observed in the window, widest
+    // coverage first so the interesting columns lead.
     const coverage = new Map<string, number>();
-    for (const m of data.models) {
+    for (const m of windowed) {
       for (const c of m.hardwareCells) {
         if (c.classes.some((x) => x !== 'unknown')) {
           coverage.set(c.label, (coverage.get(c.label) ?? 0) + 1);
@@ -103,17 +114,19 @@ export function HardwarePage() {
       }
     }
     const labels = [...coverage.entries()].sort((a, b) => b[1] - a[1]).map(([l]) => l);
-    const rows = data.models.filter((m) =>
+    const rows = windowed.filter((m) =>
       m.hardwareCells.some((c) => c.classes.some((x) => x !== 'unknown')),
     );
     return { labels, rows };
-  }, [data]);
+  }, [data, window, now]);
 
   if (loading) return <LoadingState />;
   if (error) return <ErrorState error={error} />;
   if (!data) return <ErrorState error="No index." />;
 
-  const unknownRuns = data.runs.filter((r) => !r.hardware.known).length;
+  const unknownRuns = data.runs.filter(
+    (r) => !r.hardware.known && isWithinWindow(r.finishedAt ?? r.startedAt, window, now),
+  ).length;
 
   return (
     <Page>

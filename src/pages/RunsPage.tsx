@@ -11,7 +11,6 @@ import { formatDateTime } from '../data/format';
 import { useIndex } from '../data/useLedger';
 import { useWindow } from '../data/useWindow';
 import { isWithinWindow } from '../data/window';
-import { TimeWindowControl } from '../components/TimeWindowControl';
 
 const Title = styled.h1`
   font-size: ${({ theme }) => theme.typography.fontSize.sectionH};
@@ -22,14 +21,6 @@ const Sub = styled.p`
   color: ${({ theme }) => theme.colors.text2};
   max-width: 60ch;
   margin: ${({ theme }) => theme.spacing.sm} 0 ${({ theme }) => theme.spacing.lg};
-`;
-
-const ControlRow = styled.div`
-  display: flex;
-  align-items: center;
-  gap: ${({ theme }) => theme.spacing.md};
-  flex-wrap: wrap;
-  margin-bottom: ${({ theme }) => theme.spacing.md};
 `;
 
 const Search = styled.input`
@@ -166,10 +157,7 @@ export function RunsPage() {
         Reverse-chronological, unfiltered; Failed, partial, and issue-marked runs included.{' '}
         {data.runCount} runs in the current data set.
       </Sub>
-      <ControlRow>
-        <TimeWindowControl />
-        <Search placeholder="Filter by run id, suite, or model set…" value={query} onChange={(e) => setQuery(e.target.value)} />
-      </ControlRow>
+      <Search placeholder="Filter by run id, suite, or model set…" value={query} onChange={(e) => setQuery(e.target.value)} />
       {rows.length === 0 ? (
         <EmptyState label="No runs in this period. Widen the window, or select All." />
       ) : (

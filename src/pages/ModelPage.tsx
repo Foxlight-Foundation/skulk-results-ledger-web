@@ -5,10 +5,12 @@ import { CaveatList, Chip, FamilyBadge, PassRateChip } from '../components/Chip'
 import { TrendChart } from '../components/charts/TrendChart';
 import { BigNumber, Eyebrow, Grid, InlineLink, Muted, Page, Panel, Row } from '../components/primitives';
 import { SortableTable, type Column } from '../components/SortableTable';
-import { ErrorState, LoadingState } from '../components/States';
+import { EmptyState, ErrorState, LoadingState } from '../components/States';
 import type { ModelTimePoint } from '../data/schema';
 import { formatDate, formatSeconds, formatTps } from '../data/format';
 import { useModelHistory } from '../data/useLedger';
+import { useWindow } from '../data/useWindow';
+import { isWithinWindow, windowRollup } from '../data/window';
 
 const Header = styled.header`
   margin-bottom: ${({ theme }) => theme.spacing.lg};
@@ -41,11 +43,17 @@ const Section = styled.h2`
 export function ModelPage() {
   const { slug } = useParams();
   const { data, error, loading } = useModelHistory(slug);
+  const { window, now } = useWindow();
   const navigate = useNavigate();
 
   if (loading) return <LoadingState label="Loading model…" />;
   if (error) return <ErrorState error={error} />;
   if (!data) return <ErrorState error="Model not found." />;
+
+  // Scope the model's headline, hardware cells, and history to the selected
+  // period. Everything below reflects only runs in the window.
+  const w = windowRollup(data, window, now);
+  const timeline = data.timeline.filter((t) => isWithinWindow(t.startedAt, window, now));
 
   const columns: Column<ModelTimePoint>[] = [
     {
@@ -123,7 +131,7 @@ export function ModelPage() {
           {data.nodeCountsObserved.length > 0 && (
             <Chip>{data.nodeCountsObserved.join('/')}-node</Chip>
           )}
-          {data.hardwareCells
+          {w.hardwareCells
             .filter((c) => c.classes.some((x) => x !== 'unknown'))
             .map((c) => (
               <Chip
@@ -145,38 +153,44 @@ export function ModelPage() {
 
       <Grid $min="180px">
         <StatCard>
-          <BigNumber>{formatTps(data.decodeTpsTypical)}</BigNumber>
+          <BigNumber>{formatTps(w.decodeTpsTypical)}</BigNumber>
           <StatLabel>typical decode tok/s</StatLabel>
         </StatCard>
         <StatCard>
-          <BigNumber>{formatTps(data.decodeTpsLatest)}</BigNumber>
+          <BigNumber>{formatTps(w.decodeTpsLatest)}</BigNumber>
           <StatLabel>latest credible tok/s</StatLabel>
         </StatCard>
         <StatCard>
-          <BigNumber>{formatSeconds(data.ttftLatestMedian)}</BigNumber>
+          <BigNumber>{formatSeconds(w.ttftLatestMedian)}</BigNumber>
           <StatLabel>latest TTFT</StatLabel>
         </StatCard>
         <StatCard>
           <BigNumber>
-            {data.credibleRunCount}
-            <Muted style={{ fontSize: '1rem' }}> / {data.runCount}</Muted>
+            {w.credibleRunCount}
+            <Muted style={{ fontSize: '1rem' }}> / {w.runCountInWindow}</Muted>
           </BigNumber>
           <StatLabel>credible / total runs</StatLabel>
         </StatCard>
       </Grid>
 
       <Section>Throughput history</Section>
-      <TrendChart timeline={data.timeline} />
+      {timeline.length === 0 ? (
+        <EmptyState label="No runs for this model in the selected period. Widen the window, or select All." />
+      ) : (
+        <>
+          <TrendChart timeline={timeline} />
 
-      <Section>Every run</Section>
-      <SortableTable
-        columns={columns}
-        rows={data.timeline}
-        rowKey={(t) => t.runId}
-        onRowClick={(t) => navigate(`/run/${t.runId}`)}
-        initialSortKey="date"
-        initialSortDir="desc"
-      />
+          <Section>Every run</Section>
+          <SortableTable
+            columns={columns}
+            rows={timeline}
+            rowKey={(t) => t.runId}
+            onRowClick={(t) => navigate(`/run/${t.runId}`)}
+            initialSortKey="date"
+            initialSortDir="desc"
+          />
+        </>
+      )}
     </Page>
   );
 }

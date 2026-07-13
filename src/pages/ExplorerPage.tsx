@@ -12,7 +12,6 @@ import { FAMILY_META, formatSeconds, formatTps } from '../data/format';
 import { useIndex } from '../data/useLedger';
 import { useWindow } from '../data/useWindow';
 import { isWithinWindow, windowRollup } from '../data/window';
-import { TimeWindowControl } from '../components/TimeWindowControl';
 
 const Hero = styled.header`
   padding: ${({ theme }) => `${theme.spacing.xl} 0 ${theme.spacing.lg}`};
@@ -103,11 +102,6 @@ const FilterBtn = styled.button<{ $active?: boolean }>`
 const SectionLabel = styled.h2`
   font-size: ${({ theme }) => theme.typography.fontSize.xl};
   margin: ${({ theme }) => theme.spacing.xl} 0 ${({ theme }) => theme.spacing.md};
-`;
-
-const PeriodRow = styled.div`
-  display: flex;
-  margin: 0 0 ${({ theme }) => theme.spacing.md};
 `;
 
 const HiddenNote = styled.p`
@@ -279,10 +273,6 @@ export function ExplorerPage() {
           only. Click any point or row for the full run behind it.
         </Sub>
       </Hero>
-
-      <PeriodRow>
-        <TimeWindowControl />
-      </PeriodRow>
 
       <Stats>
         <Stat>

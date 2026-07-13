@@ -1,10 +1,13 @@
+import { useMemo } from 'react';
 import styled from 'styled-components';
 
 import { PassRateChip } from '../components/Chip';
 import { BigNumber, Eyebrow, Grid, Muted, Page, Panel, Row } from '../components/primitives';
-import { ErrorState, LoadingState } from '../components/States';
+import { EmptyState, ErrorState, LoadingState } from '../components/States';
 import { formatDate } from '../data/format';
 import { useIndex } from '../data/useLedger';
+import { useWindow } from '../data/useWindow';
+import { isWithinWindow } from '../data/window';
 
 const Title = styled.h1`
   font-size: ${({ theme }) => theme.typography.fontSize.sectionH};
@@ -38,6 +41,44 @@ const Line = styled(Row)`
 
 export function SuitesPage() {
   const { data, error, loading } = useIndex();
+  const { window, now } = useWindow();
+
+  // Recompute each suite's stats for the selected period from the run
+  // summaries (which carry test set / timestamp / pass-fail counts). Distinct
+  // models-covered is not reconstructable per suite from the index, so the
+  // coverage proxy is the largest single run's model count in the window
+  // (period-accurate, never overstated).
+  const suites = useMemo(() => {
+    if (!data) return [];
+    const byTest = new Map<string, typeof data.runs>();
+    for (const r of data.runs) {
+      if (!isWithinWindow(r.finishedAt ?? r.startedAt, window, now)) continue;
+      const arr = byTest.get(r.testSet) ?? [];
+      arr.push(r);
+      byTest.set(r.testSet, arr);
+    }
+    return [...byTest.entries()]
+      .map(([testSet, runs]) => {
+        const pass = runs.reduce((n, r) => n + r.passCount, 0);
+        const totalResults = runs.reduce((n, r) => n + r.passCount + r.failCount, 0);
+        const lastRunAt =
+          runs
+            .map((r) => r.finishedAt ?? r.startedAt)
+            .filter((v): v is string => v != null)
+            .sort()
+            .at(-1) ?? null;
+        return {
+          testSet,
+          runCount: runs.length,
+          modelCount: runs.reduce((mx, r) => Math.max(mx, r.modelCount), 0),
+          totalResults,
+          passRate: totalResults ? pass / totalResults : 0,
+          lastRunAt,
+        };
+      })
+      .sort((a, b) => b.runCount - a.runCount);
+  }, [data, window, now]);
+
   if (loading) return <LoadingState />;
   if (error) return <ErrorState error={error} />;
   if (!data) return <ErrorState error="No index." />;
@@ -47,11 +88,14 @@ export function SuitesPage() {
       <Eyebrow>Coverage</Eyebrow>
       <Title>Test suites</Title>
       <Sub>
-        Each suite is a named battery of assertions run against a set of models. Pass rate is across
-        every result the suite has ever recorded.
+        Each suite is a named battery of assertions run against a set of models. Stats reflect the
+        selected period; pass rate is across the suite's results in that window.
       </Sub>
+      {suites.length === 0 ? (
+        <EmptyState label="No suite runs in the selected period. Widen the window, or select All." />
+      ) : (
       <Grid $min="300px">
-        {data.suites.map((s) => (
+        {suites.map((s) => (
           <Card key={s.testSet}>
             <SuiteName>{s.testSet}</SuiteName>
             <Row $justify="space-between">
@@ -78,6 +122,7 @@ export function SuitesPage() {
           </Card>
         ))}
       </Grid>
+      )}
     </Page>
   );
 }

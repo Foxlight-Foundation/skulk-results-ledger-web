@@ -465,7 +465,7 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
       communityRunCount: timeline.filter((t) => t.tier === 'community').length,
       // Compact per-run points carried into the index rollup (toRollup keeps
       // them, strips only `timeline`) so the site can re-aggregate any window.
-      windowPoints: timeline.map((t): WindowPoint => ({
+      windowPoints: timeline.map((t, i): WindowPoint => ({
         startedAt: t.startedAt,
         decodeTpsMedian: t.decodeTpsMedian,
         ttftMedian: t.ttftMedian,
@@ -473,6 +473,7 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
         tier: t.tier,
         hardwareLabel: t.hardware.label,
         hardwareClasses: t.hardware.classes,
+        clusterAttributed: entries[i].result.hardwareAttribution === 'cluster',
       })),
       timeline,
     });

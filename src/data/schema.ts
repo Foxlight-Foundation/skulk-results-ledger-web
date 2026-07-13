@@ -200,6 +200,10 @@ export interface WindowPoint {
   hardwareLabel: string;
   /** Canonical hardware classes, for class-level filtering parity with cells. */
   hardwareClasses: string[];
+  /** True when hardware was attributed at whole-cluster level (placement not
+   * recorded); preserves the Hardware page's cluster-fallback asterisk under a
+   * window. */
+  clusterAttributed: boolean;
 }
 
 export interface ModelRollup {
