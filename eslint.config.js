@@ -16,8 +16,12 @@ const browserGlobals = {
   React: 'readonly',
   HTMLElement: 'readonly',
   HTMLDivElement: 'readonly',
+  HTMLSpanElement: 'readonly',
   SVGSVGElement: 'readonly',
   MediaQueryListEvent: 'readonly',
+  KeyboardEvent: 'readonly',
+  MouseEvent: 'readonly',
+  Node: 'readonly',
 };
 
 const nodeGlobals = {

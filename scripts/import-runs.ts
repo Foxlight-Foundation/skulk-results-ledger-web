@@ -41,6 +41,7 @@ import type {
   SuiteRollup,
 } from '../src/data/schema.ts';
 import { LEDGER_SCHEMA_VERSION } from '../src/data/schema.ts';
+import { suiteCatalogEntry } from '../src/data/suite-catalog.ts';
 import { profileOf, UNKNOWN_HARDWARE } from './hardware-taxonomy.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -116,6 +117,7 @@ interface RawReport {
   started_at?: string | null;
   finished_at?: string | null;
   spec: { model_set: string; test_set: string; mode: string; run_name?: string | null };
+  test_set_description?: string | null;
   models?: unknown[];
   placements?: RawPlacement[];
   results?: RawResult[];
@@ -321,6 +323,12 @@ function buildRunDetail(
     mode: report.spec.mode,
     modelSet: report.spec.model_set,
     testSet: report.spec.test_set,
+    // Guard against a non-string value in raw JSON (a malformed community
+    // report): the raw type is not validated, and buildSuites later calls
+    // .trim() on this, so a single bad field would throw and block the whole
+    // bake/deploy. Coerce anything non-string to empty.
+    testSetDescription:
+      typeof report.test_set_description === 'string' ? report.test_set_description : '',
     runName: redact ? null : report.spec.run_name ?? null,
     passCount,
     failCount,
@@ -358,7 +366,9 @@ function shortHash(value: string): string {
 }
 
 function toSummary(detail: RunDetail): RunSummary {
-  const { nodes: _n, repositories: _r, harnessPackages: _h, python: _p, platform: _pl, models: _m, issues: _i, apiBaseUrl: _a, ...summary } = detail;
+  // testSetDescription stays on the per-run detail file only; it feeds
+  // buildSuites and would bloat every index run row otherwise.
+  const { nodes: _n, repositories: _r, harnessPackages: _h, python: _p, platform: _pl, models: _m, issues: _i, apiBaseUrl: _a, testSetDescription: _tsd, ...summary } = detail;
   return summary;
 }
 
@@ -502,6 +512,16 @@ function buildSuites(details: RunDetail[]): SuiteRollup[] {
       .filter((v): v is string => v != null)
       .sort()
       .at(-1);
+    // Prefer the description the most-recent run carries in its own report
+    // (self-describing runs), falling back to the authored catalog blurb. The
+    // catalog also supplies title / measures / category the report lacks.
+    const catalog = suiteCatalogEntry(testSet);
+    const reportDescription = runs
+      .slice()
+      .sort((a, b) => (a.startedAt ?? '').localeCompare(b.startedAt ?? ''))
+      .map((d) => d.testSetDescription.trim())
+      .filter((v) => v.length > 0)
+      .at(-1);
     suites.push({
       testSet,
       runCount: runs.length,
@@ -509,6 +529,10 @@ function buildSuites(details: RunDetail[]): SuiteRollup[] {
       totalResults,
       passRate: totalResults ? totalPass / totalResults : 0,
       lastRunAt: lastRunAt ?? null,
+      title: catalog?.title ?? null,
+      description: reportDescription ?? catalog?.blurb ?? null,
+      measures: catalog?.measures ?? null,
+      category: catalog?.category ?? null,
     });
   }
   suites.sort((a, b) => b.runCount - a.runCount);
