@@ -52,7 +52,7 @@ const Segment = styled.button<{ $active: boolean }>`
  * headline medians and run lists to the selected period so a stale run cannot
  * drag the "current" number. Reads/writes the shared selection via useWindow.
  */
-export function TimeWindowControl({ label = 'Window' }: { label?: string }) {
+export function TimeWindowControl({ label = 'Period' }: { label?: string }) {
   const { window, setWindow } = useWindow();
   return (
     <Group role="group" aria-label="Time window">

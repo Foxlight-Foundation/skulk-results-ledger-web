@@ -11,7 +11,7 @@ import type { EngineFamily, ModelRollup } from '../data/schema';
 import { FAMILY_META, formatSeconds, formatTps } from '../data/format';
 import { useIndex } from '../data/useLedger';
 import { useWindow } from '../data/useWindow';
-import { windowRollup } from '../data/window';
+import { isWithinWindow, windowRollup } from '../data/window';
 import { TimeWindowControl } from '../components/TimeWindowControl';
 
 const Hero = styled.header`
@@ -105,6 +105,11 @@ const SectionLabel = styled.h2`
   margin: ${({ theme }) => theme.spacing.xl} 0 ${({ theme }) => theme.spacing.md};
 `;
 
+const PeriodRow = styled.div`
+  display: flex;
+  margin: 0 0 ${({ theme }) => theme.spacing.md};
+`;
+
 const HiddenNote = styled.p`
   margin: 0 0 ${({ theme }) => theme.spacing.md};
   font-family: ${({ theme }) => theme.typography.fontFamily.mono};
@@ -180,6 +185,23 @@ export function ExplorerPage() {
     visible.sort((a, b) => (b.decodeTpsTypical ?? -1) - (a.decodeTpsTypical ?? -1));
     return { models: visible, hiddenByWindow: hidden };
   }, [data, family, hardware, query, window, now]);
+
+  // The Period control sits above these tiles, so the tiles reflect the same
+  // window: runs, models, suites, and versions observed in the selected period
+  // (all-time when the window is All). Computed from the index run summaries,
+  // which carry the timestamp / test set / version each tile needs.
+  const periodStats = useMemo(() => {
+    if (!data) return { runCount: 0, modelCount: 0, suiteCount: 0, versionCount: 0 };
+    const runs = data.runs.filter((r) => isWithinWindow(r.finishedAt ?? r.startedAt, window, now));
+    const suites = new Set(runs.map((r) => r.testSet));
+    const versions = new Set(
+      runs.map((r) => r.skulkVersion).filter((v): v is string => v != null),
+    );
+    const modelCount = data.models.filter((m) => windowRollup(m, window, now).hasWindowData).length;
+    const versionCount =
+      window == null ? Math.max(versions.size, SKULK_VERSION_BASELINE) : versions.size;
+    return { runCount: runs.length, modelCount, suiteCount: suites.size, versionCount };
+  }, [data, window, now]);
 
   if (loading) return <LoadingState />;
   if (error) return <ErrorState error={error} />;
@@ -258,21 +280,25 @@ export function ExplorerPage() {
         </Sub>
       </Hero>
 
+      <PeriodRow>
+        <TimeWindowControl />
+      </PeriodRow>
+
       <Stats>
         <Stat>
-          <StatNum>{data.runCount}</StatNum>
+          <StatNum>{periodStats.runCount}</StatNum>
           <StatLabel>runs recorded</StatLabel>
         </Stat>
         <Stat>
-          <StatNum>{data.modelCount}</StatNum>
+          <StatNum>{periodStats.modelCount}</StatNum>
           <StatLabel>models measured</StatLabel>
         </Stat>
         <Stat>
-          <StatNum>{data.suiteCount}</StatNum>
+          <StatNum>{periodStats.suiteCount}</StatNum>
           <StatLabel>test suites</StatLabel>
         </Stat>
         <Stat>
-          <StatNum>{Math.max(data.skulkVersions.length, SKULK_VERSION_BASELINE)}</StatNum>
+          <StatNum>{periodStats.versionCount}</StatNum>
           <StatLabel>Skulk versions</StatLabel>
         </Stat>
       </Stats>
@@ -284,7 +310,6 @@ export function ExplorerPage() {
       )}
 
       <Controls $gap="8px">
-        <TimeWindowControl />
         <Search
           placeholder="Filter models…"
           value={query}
