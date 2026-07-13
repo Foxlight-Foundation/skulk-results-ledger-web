@@ -7,9 +7,11 @@ import { SpeedScatter } from '../components/charts/SpeedScatter';
 import { Eyebrow, Muted, Page, Panel, Row } from '../components/primitives';
 import { SortableTable, type Column } from '../components/SortableTable';
 import { EmptyState, ErrorState, LoadingState } from '../components/States';
-import type { EngineFamily, ModelRollup } from '../data/schema';
+import type { Caveat, EngineFamily, ModelRollup } from '../data/schema';
 import { FAMILY_META, formatSeconds, formatTps } from '../data/format';
 import { useIndex } from '../data/useLedger';
+import { useWindow } from '../data/useWindow';
+import { isWithinWindow, windowRollup } from '../data/window';
 
 const Hero = styled.header`
   padding: ${({ theme }) => `${theme.spacing.xl} 0 ${theme.spacing.lg}`};
@@ -102,6 +104,13 @@ const SectionLabel = styled.h2`
   margin: ${({ theme }) => theme.spacing.xl} 0 ${({ theme }) => theme.spacing.md};
 `;
 
+const HiddenNote = styled.p`
+  margin: 0 0 ${({ theme }) => theme.spacing.md};
+  font-family: ${({ theme }) => theme.typography.fontFamily.mono};
+  font-size: ${({ theme }) => theme.typography.fontSize.eyebrow};
+  color: ${({ theme }) => theme.colors.text3};
+`;
+
 const FAMILIES: (EngineFamily | 'all')[] = ['all', 'mlx', 'llama_cpp'];
 
 const HardwareSelect = styled.select`
@@ -133,15 +142,69 @@ export function ExplorerPage() {
   const [hardware, setHardware] = useState('all');
   const [query, setQuery] = useState('');
 
-  const models = useMemo(() => {
-    if (!data) return [];
-    return data.models.filter((m) => {
+  const { window, now } = useWindow();
+
+  // Window each rollup's headline medians and cells, then apply filters. The
+  // windowed decodeTpsTypical / ttft / hardwareCells / counts override the
+  // all-time baked values so every number reflects the selected period; a
+  // model with no runs in the window is hidden (its absence is bound to the
+  // period, not "never tested"), and counted for the indicator below.
+  const { models, hiddenByWindow } = useMemo(() => {
+    if (!data) return { models: [] as ModelRollup[], hiddenByWindow: 0 };
+    const base = data.models.filter((m) => {
       if (family !== 'all' && m.family !== family) return false;
-      if (hardware !== 'all' && !m.hardwareCells.some((c) => c.label === hardware)) return false;
       if (query && !m.displayName.toLowerCase().includes(query.toLowerCase())) return false;
       return true;
     });
-  }, [data, family, hardware, query]);
+    const visible: ModelRollup[] = [];
+    let hidden = 0;
+    for (const m of base) {
+      const w = windowRollup(m, window, now);
+      if (!w.hasWindowData) {
+        hidden += 1;
+        continue;
+      }
+      if (hardware !== 'all' && !w.hardwareCells.some((c) => c.label === hardware)) continue;
+      // Recompute the has_failures caveat from the window so it cannot
+      // contradict the windowed pass rate (a row showing 100% pass in the
+      // period must not still wear an all-time "failures" chip). Other caveats
+      // are data-provenance notes that remain true about the model.
+      const caveats: Caveat[] = m.caveats.filter((c) => c !== 'has_failures');
+      if (w.hasFailuresInWindow) caveats.push('has_failures');
+      visible.push({
+        ...m,
+        decodeTpsTypical: w.decodeTpsTypical,
+        decodeTpsLatest: w.decodeTpsLatest,
+        ttftLatestMedian: w.ttftLatestMedian,
+        hardwareCells: w.hardwareCells,
+        credibleRunCount: w.credibleRunCount,
+        runCount: w.runCountInWindow,
+        communityRunCount: w.communityRunCount,
+        passRate: w.passRate,
+        caveats,
+        nodeCountsObserved: w.nodeCountsObserved,
+      });
+    }
+    visible.sort((a, b) => (b.decodeTpsTypical ?? -1) - (a.decodeTpsTypical ?? -1));
+    return { models: visible, hiddenByWindow: hidden };
+  }, [data, family, hardware, query, window, now]);
+
+  // The Period control sits above these tiles, so the tiles reflect the same
+  // window: runs, models, suites, and versions observed in the selected period
+  // (all-time when the window is All). Computed from the index run summaries,
+  // which carry the timestamp / test set / version each tile needs.
+  const periodStats = useMemo(() => {
+    if (!data) return { runCount: 0, modelCount: 0, suiteCount: 0, versionCount: 0 };
+    const runs = data.runs.filter((r) => isWithinWindow(r.finishedAt ?? r.startedAt, window, now));
+    const suites = new Set(runs.map((r) => r.testSet));
+    const versions = new Set(
+      runs.map((r) => r.skulkVersion).filter((v): v is string => v != null),
+    );
+    const modelCount = data.models.filter((m) => windowRollup(m, window, now).hasWindowData).length;
+    const versionCount =
+      window == null ? Math.max(versions.size, SKULK_VERSION_BASELINE) : versions.size;
+    return { runCount: runs.length, modelCount, suiteCount: suites.size, versionCount };
+  }, [data, window, now]);
 
   if (loading) return <LoadingState />;
   if (error) return <ErrorState error={error} />;
@@ -222,19 +285,19 @@ export function ExplorerPage() {
 
       <Stats>
         <Stat>
-          <StatNum>{data.runCount}</StatNum>
+          <StatNum>{periodStats.runCount}</StatNum>
           <StatLabel>runs recorded</StatLabel>
         </Stat>
         <Stat>
-          <StatNum>{data.modelCount}</StatNum>
+          <StatNum>{periodStats.modelCount}</StatNum>
           <StatLabel>models measured</StatLabel>
         </Stat>
         <Stat>
-          <StatNum>{data.suiteCount}</StatNum>
+          <StatNum>{periodStats.suiteCount}</StatNum>
           <StatLabel>test suites</StatLabel>
         </Stat>
         <Stat>
-          <StatNum>{Math.max(data.skulkVersions.length, SKULK_VERSION_BASELINE)}</StatNum>
+          <StatNum>{periodStats.versionCount}</StatNum>
           <StatLabel>Skulk versions</StatLabel>
         </Stat>
       </Stats>
@@ -267,8 +330,20 @@ export function ExplorerPage() {
       </Controls>
 
       <SectionLabel>All models</SectionLabel>
+      {hiddenByWindow > 0 && (
+        <HiddenNote>
+          {hiddenByWindow} {hiddenByWindow === 1 ? 'model' : 'models'} hidden with no runs in this
+          period. Widen the window to see them.
+        </HiddenNote>
+      )}
       {models.length === 0 ? (
-        <EmptyState label="No models match your filter." />
+        <EmptyState
+          label={
+            hiddenByWindow > 0
+              ? 'No runs in this period. Widen the window, or select All.'
+              : 'No models match your filter.'
+          }
+        />
       ) : (
         <SortableTable
           columns={columns}

@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 
 import { Layout } from './components/Layout';
+import { WindowProvider } from './data/useWindow';
 import { ShootingStars } from './components/ShootingStars/ShootingStars';
 import { StarField } from './components/StarField/StarField';
 import { ComparePage } from './pages/ComparePage';
@@ -22,6 +23,7 @@ export function App() {
           sky image, below all content. Same mount shape as FoxlightWeb. */}
       <StarField />
       <ShootingStars />
+      <WindowProvider>
       <Routes>
         <Route element={<Layout />}>
           <Route index element={<ExplorerPage />} />
@@ -35,6 +37,7 @@ export function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
       </Routes>
+      </WindowProvider>
     </BrowserRouter>
   );
 }

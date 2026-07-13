@@ -1,4 +1,6 @@
 import { Link, NavLink, Outlet } from 'react-router-dom';
+
+import { TimeWindowControl } from './TimeWindowControl';
 import styled, { css, keyframes } from 'styled-components';
 import { FoxlightMark } from './FoxlightMark/FoxlightMark';
 
@@ -205,6 +207,21 @@ const Main = styled.main`
   }
 `;
 
+/* Global, persistent period selector: one control that scopes every page's
+   data to the selected window. Aligned to the page content width. */
+const PeriodBar = styled.div`
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: ${({ theme }) => `0 ${theme.spacing.lg}`};
+  display: flex;
+  justify-content: flex-end;
+
+  @media (max-width: ${({ theme }) => theme.breakpoints.md}) {
+    padding: ${({ theme }) => `0 ${theme.spacing.md}`};
+    justify-content: flex-start;
+  }
+`;
+
 const FooterWrapper = styled.footer`
   position: relative;
   z-index: 1;
@@ -373,6 +390,9 @@ export function Layout() {
         </Pill>
       </Floater>
       <Main>
+        <PeriodBar>
+          <TimeWindowControl />
+        </PeriodBar>
         <Outlet />
       </Main>
       <FooterWrapper>
