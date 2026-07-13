@@ -3,11 +3,11 @@ import type { ReactNode } from 'react';
 import styled from 'styled-components';
 
 /**
- * A small "i" trigger that reveals a floating explanatory panel. Opens on hover
- * or keyboard focus (desktop) and toggles pinned on click/tap (touch), so the
- * same control works with a pointer and a finger. Dismisses on Escape, on an
- * outside click, or when focus leaves. Purely presentational: the caller passes
- * the panel content as children.
+ * A small "i" trigger that reveals a floating explanatory panel. A mouse hover
+ * opens it transiently; a click, tap, or keyboard Enter/Space toggles it open
+ * and pinned, so a second activation always closes it. A pinned panel also
+ * dismisses on Escape or an outside click. Purely presentational: the caller
+ * passes the panel content as children.
  */
 
 const Wrap = styled.span`
@@ -127,17 +127,26 @@ export function InfoPopover({ label, children }: InfoPopoverProps) {
   return (
     <Wrap
       ref={wrapRef}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      // Hover-open is for real mouse pointers only. A touch tap can synthesize
+      // pointerenter without a matching leave, which combined with `open =
+      // hovered || pinned` would keep the panel open and make the tap toggle
+      // impossible to close; touch/pen go through the click toggle instead.
+      onPointerEnter={(e) => {
+        if (e.pointerType === 'mouse') setHovered(true);
+      }}
+      onPointerLeave={(e) => {
+        if (e.pointerType === 'mouse') setHovered(false);
+      }}
     >
       <Trigger
         type="button"
         aria-label={label}
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
+        // Click is the authoritative toggle for tap and keyboard (Enter/Space
+        // fire a click on a button), so a second tap or press always closes.
+        // No focus-open: a focused-but-unclosable panel was the bug.
         onClick={() => setPinned((p) => !p)}
-        onFocus={() => setHovered(true)}
-        onBlur={() => setHovered(false)}
       >
         i
       </Trigger>
