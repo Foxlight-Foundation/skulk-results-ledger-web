@@ -54,6 +54,11 @@ const DISCRETE_GPU_VENDORS = new Set(['nvidia', 'intel']);
  */
 const KNOWN_DISCRETE_GPUS: Record<string, { chip: string; vramGb: number }> = {
   'nvidia a40': { chip: 'a40', vramGb: 48 },
+  'nvidia a100 80gb pcie': { chip: 'a100', vramGb: 80 },
+  'nvidia a100-sxm4-80gb': { chip: 'a100', vramGb: 80 },
+  'nvidia h100 80gb hbm3': { chip: 'h100', vramGb: 80 },
+  'nvidia h100 pcie': { chip: 'h100', vramGb: 80 },
+  'nvidia h100 nvl': { chip: 'h100', vramGb: 94 },
 };
 
 /** Canonical class for one node, e.g. `apple-16gb` or `nvidia-a40-48gb`. */
