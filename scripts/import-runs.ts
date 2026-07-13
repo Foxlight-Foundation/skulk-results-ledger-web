@@ -476,6 +476,7 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
         clusterAttributed: entries[i].result.hardwareAttribution === 'cluster',
         passCount: entries[i].result.passCount,
         failCount: entries[i].result.failCount,
+        nodeCount: t.nodeCount,
       })),
       timeline,
     });

@@ -209,6 +209,9 @@ export interface WindowPoint {
   passCount: number;
   /** Failed result count for this run. */
   failCount: number;
+  /** Node count this run used, so a windowed row's "Nodes" column reflects the
+   * period instead of carrying the all-time set. */
+  nodeCount: number;
 }
 
 export interface ModelRollup {

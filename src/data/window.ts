@@ -90,6 +90,9 @@ export interface WindowedRollup {
    * recompute the `has_failures` caveat instead of carrying the all-time one,
    * which would otherwise contradict a windowed 100% pass rate. */
   hasFailuresInWindow: boolean;
+  /** Distinct node counts observed in the window (sorted ascending), so a
+   * windowed row's "Nodes" column reflects the period, not all time. */
+  nodeCountsObserved: number[];
   /** Per-hardware cells recomputed for the window (foxlight, credible). */
   hardwareCells: HardwareCell[];
   /** False when NO points fell in the window: the row should be hidden, and
@@ -151,6 +154,9 @@ export function windowRollup(
   // the window (both tiers), not just the credible foxlight headline base.
   const totalResults = inWindow.reduce((n, p) => n + p.passCount + p.failCount, 0);
   const totalPass = inWindow.reduce((n, p) => n + p.passCount, 0);
+  const nodeCountsObserved = [
+    ...new Set(inWindow.map((p) => p.nodeCount).filter((n) => n > 0)),
+  ].sort((a, b) => a - b);
 
   return {
     runCountInWindow: inWindow.length,
@@ -161,6 +167,7 @@ export function windowRollup(
     communityRunCount: inWindow.filter((p) => p.tier === 'community').length,
     passRate: totalResults ? totalPass / totalResults : 0,
     hasFailuresInWindow: totalResults - totalPass > 0,
+    nodeCountsObserved,
     hardwareCells,
     hasWindowData: inWindow.length > 0,
   };
