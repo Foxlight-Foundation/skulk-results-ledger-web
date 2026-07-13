@@ -15,12 +15,14 @@ const Eyebrow = styled.span`
   font-family: ${({ theme }) => theme.typography.fontFamily.mono};
   font-size: ${({ theme }) => theme.typography.fontSize.eyebrow};
   letter-spacing: 0.3px;
-  color: ${({ theme }) => theme.colors.text3};
+  /* text2 rather than the dim text3: this is an interactive control, and text3
+   * washed out against the starfield on the deployed site. */
+  color: ${({ theme }) => theme.colors.text2};
 `;
 
 const Segments = styled.div`
   display: inline-flex;
-  border: 1px solid ${({ theme }) => theme.colors.border1};
+  border: 1px solid ${({ theme }) => theme.colors.border2};
   border-radius: ${({ theme }) => theme.radii.pill};
   overflow: hidden;
   background: ${({ theme }) => theme.colors.moonWash};
@@ -31,7 +33,7 @@ const Segment = styled.button<{ $active: boolean }>`
   cursor: pointer;
   border: none;
   background: ${({ $active, theme }) => ($active ? theme.colors.cyanWash : 'transparent')};
-  color: ${({ $active, theme }) => ($active ? theme.colors.cyan : theme.colors.text3)};
+  color: ${({ $active, theme }) => ($active ? theme.colors.cyan : theme.colors.text2)};
   font-family: ${({ theme }) => theme.typography.fontFamily.mono};
   font-size: ${({ theme }) => theme.typography.fontSize.eyebrow};
   letter-spacing: 0.3px;
@@ -39,7 +41,7 @@ const Segment = styled.button<{ $active: boolean }>`
   transition: background 0.12s ease, color 0.12s ease;
 
   & + & {
-    border-left: 1px solid ${({ theme }) => theme.colors.border1};
+    border-left: 1px solid ${({ theme }) => theme.colors.border2};
   }
 
   &:hover {
