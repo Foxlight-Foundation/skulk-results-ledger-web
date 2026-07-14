@@ -174,7 +174,14 @@ export function ExplorerPage() {
       // the selected hardware in the period drops out here (hidden by hardware,
       // not by window, so it is not counted in the period indicator).
       const scoped = hardware === 'all' ? w : windowRollup(m, window, now, hardware);
-      if (hardware !== 'all' && !scoped.hasWindowData) continue;
+      // Require a first-party (foxlight) cell on the selected hardware, not just
+      // any windowed point: hardwareCells are foxlight-only, so a model with
+      // only community points on this shape in the period has an empty scoped
+      // cell and no headline number, and must not surface under the hardware
+      // filter (this preserves the pre-fix `hardwareCells.some(...)` predicate,
+      // which keyed on foxlight cells; tiers never blend).
+      if (hardware !== 'all' && !scoped.hardwareCells.some((c) => c.label === hardware))
+        continue;
       // Recompute the has_failures caveat from the (scoped) window so it cannot
       // contradict the shown pass rate (a row showing 100% pass in the
       // period must not still wear an all-time "failures" chip). Other caveats
