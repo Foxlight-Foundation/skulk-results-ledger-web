@@ -106,14 +106,27 @@ function foxlightCredible(points: WindowPoint[]): WindowPoint[] {
   );
 }
 
-/** Recompute one model rollup's headline + hardware cells for a window. */
+/**
+ * Recompute one model rollup's headline + hardware cells for a window.
+ *
+ * When `hardwareLabel` is given, the recomputation is restricted to points
+ * served on exactly that hardware shape, so every derived number (typical
+ * decode, latest TTFT, node counts, pass rate, run counts, and the single
+ * remaining hardware cell) reflects that hardware alone and never blends other
+ * shapes. This is what the hardware filter relies on: selecting "A100" must not
+ * surface a model's numbers from the Strix nodes it also ran on in the window.
+ * Omit it (or pass `undefined`) for the all-hardware rollup.
+ */
 export function windowRollup(
   rollup: ModelRollup,
   window: TimeWindow,
   now: number,
+  hardwareLabel?: string,
 ): WindowedRollup {
-  const inWindow = rollup.windowPoints.filter((p) =>
-    isWithinWindow(p.startedAt, window, now),
+  const inWindow = rollup.windowPoints.filter(
+    (p) =>
+      isWithinWindow(p.startedAt, window, now) &&
+      (hardwareLabel == null || p.hardwareLabel === hardwareLabel),
   );
   const foxlight = foxlightCredible(inWindow);
   const typical = median(foxlight.map((p) => p.decodeTpsMedian as number));

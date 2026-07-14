@@ -159,30 +159,40 @@ export function ExplorerPage() {
     const visible: ModelRollup[] = [];
     let hidden = 0;
     for (const m of base) {
+      // The period indicator counts models with no data in the window at all,
+      // independent of the hardware filter, so compute the unscoped rollup for
+      // that decision first.
       const w = windowRollup(m, window, now);
       if (!w.hasWindowData) {
         hidden += 1;
         continue;
       }
-      if (hardware !== 'all' && !w.hardwareCells.some((c) => c.label === hardware)) continue;
-      // Recompute the has_failures caveat from the window so it cannot
-      // contradict the windowed pass rate (a row showing 100% pass in the
+      // When a specific hardware is selected, recompute the row from ONLY that
+      // hardware's points so every displayed metric (typical tok/s, TTFT,
+      // nodes, runs, pass rate) reflects that hardware and never blends the
+      // other shapes the model also ran on in the window. A model not run on
+      // the selected hardware in the period drops out here (hidden by hardware,
+      // not by window, so it is not counted in the period indicator).
+      const scoped = hardware === 'all' ? w : windowRollup(m, window, now, hardware);
+      if (hardware !== 'all' && !scoped.hasWindowData) continue;
+      // Recompute the has_failures caveat from the (scoped) window so it cannot
+      // contradict the shown pass rate (a row showing 100% pass in the
       // period must not still wear an all-time "failures" chip). Other caveats
       // are data-provenance notes that remain true about the model.
       const caveats: Caveat[] = m.caveats.filter((c) => c !== 'has_failures');
-      if (w.hasFailuresInWindow) caveats.push('has_failures');
+      if (scoped.hasFailuresInWindow) caveats.push('has_failures');
       visible.push({
         ...m,
-        decodeTpsTypical: w.decodeTpsTypical,
-        decodeTpsLatest: w.decodeTpsLatest,
-        ttftLatestMedian: w.ttftLatestMedian,
-        hardwareCells: w.hardwareCells,
-        credibleRunCount: w.credibleRunCount,
-        runCount: w.runCountInWindow,
-        communityRunCount: w.communityRunCount,
-        passRate: w.passRate,
+        decodeTpsTypical: scoped.decodeTpsTypical,
+        decodeTpsLatest: scoped.decodeTpsLatest,
+        ttftLatestMedian: scoped.ttftLatestMedian,
+        hardwareCells: scoped.hardwareCells,
+        credibleRunCount: scoped.credibleRunCount,
+        runCount: scoped.runCountInWindow,
+        communityRunCount: scoped.communityRunCount,
+        passRate: scoped.passRate,
         caveats,
-        nodeCountsObserved: w.nodeCountsObserved,
+        nodeCountsObserved: scoped.nodeCountsObserved,
       });
     }
     visible.sort((a, b) => (b.decodeTpsTypical ?? -1) - (a.decodeTpsTypical ?? -1));
