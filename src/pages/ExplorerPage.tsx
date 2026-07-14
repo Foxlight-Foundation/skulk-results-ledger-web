@@ -108,7 +108,10 @@ const HiddenNote = styled.p`
   margin: 0 0 ${({ theme }) => theme.spacing.md};
   font-family: ${({ theme }) => theme.typography.fontFamily.mono};
   font-size: ${({ theme }) => theme.typography.fontSize.eyebrow};
-  color: ${({ theme }) => theme.colors.text3};
+  /* Deliberate full-opacity white, overriding the theme's warm-cream text
+     ceiling: the muted token was illegible against the starfield background
+     and this note must always read. */
+  color: #ffffff;
 `;
 
 const FAMILIES: (EngineFamily | 'all')[] = ['all', 'mlx', 'llama_cpp'];
