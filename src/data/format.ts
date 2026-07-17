@@ -32,10 +32,10 @@ export const CAVEAT_META: Record<Caveat, { label: string; tone: 'warn' | 'fail' 
       'This run predates runtime fingerprints, so its exact Skulk version, node set, and cache state are not recorded.',
   },
   decode_tps_estimated: {
-    label: 'wall estimate',
+    label: 'throughput estimate',
     tone: 'neutral',
     description:
-      'Decode rate is estimated from wall-clock throughput (Skulk did not report a native decode rate), so it folds in prompt/TTFT time.',
+      'This run lacks the output-token and wall-throughput fields needed to compute the decode window (output tokens over wall minus TTFT), so its decode rate falls back to a raw throughput estimate.',
   },
   has_failures: {
     label: 'failures',

@@ -147,8 +147,32 @@ function isShort(m: RawMetrics): boolean {
 }
 
 function decodeOf(m: RawMetrics): number | null {
-  // Prefer Skulk's steady-state decode rate; fall back to wall throughput.
-  return m.skulk_generation_tps != null ? m.skulk_generation_tps : m.wall_tps ?? null;
+  // The decode rate the user actually observes: output tokens over the decode
+  // window (total wall time minus TTFT). Wall time is derived from the tokens
+  // and the harness-measured wall throughput (tokens / wall_tps), so this needs
+  // no extra fields and is defined IDENTICALLY for every run and every engine.
+  //
+  // Deliberately NOT skulk_generation_tps: for speculative / MTP served models
+  // that server self-report under-counts accepted draft tokens -- it read ~59
+  // tok/s while the user observed ~90 on Qwen3.6-35B-A3B-MTP -- and because that
+  // field only started being recorded partway through the history, preferring it
+  // when present made a flat throughput history look like a cliff on the date it
+  // appeared. Computing decode from observed output + wall time is consistent
+  // across the whole timeline and credits the MTP speedup the user really gets.
+  const tokens = tokensOf(m);
+  const wallTps = m.wall_tps;
+  if (tokens != null && tokens > 0 && wallTps != null && wallTps > 0) {
+    const wallSeconds = tokens / wallTps;
+    const ttft = m.ttft_s != null && m.ttft_s > 0 ? m.ttft_s : 0;
+    const decodeSeconds = wallSeconds - ttft;
+    if (decodeSeconds > 0) return tokens / decodeSeconds;
+    // Degenerate case (TTFT >= wall time, e.g. a one-token reply): the decode
+    // window is unmeasurable, so report the raw observed throughput.
+    return wallTps;
+  }
+  // No usable token/throughput components: fall back to whatever rate exists,
+  // preferring observed wall throughput over the server self-report.
+  return wallTps ?? m.skulk_generation_tps ?? null;
 }
 
 function aggregate(
