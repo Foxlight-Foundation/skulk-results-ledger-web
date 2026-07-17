@@ -224,6 +224,7 @@ function nodesFrom(report: RawReport): NodeInfo[] {
     acceleratorVendor: n.accelerator_vendor ?? null,
     acceleratorName: n.accelerator_name ?? null,
     vramTotalBytes: n.vram_total_bytes ?? null,
+    gttTotalBytes: n.gtt_total_bytes ?? null,
     skulkVersion: n.skulk_version ?? null,
   }));
 }
@@ -263,11 +264,15 @@ function buildRunDetail(
   // to join placements to fingerprint nodes); only the derived class/label
   // survives into the output, which carries nothing operator-identifying.
   const nodeById = new Map(nodes.map((n) => [n.nodeId, n]));
-  const clusterHardware = nodes.length ? profileOf(nodes) : UNKNOWN_HARDWARE;
+  // Only our own reports may fall back to the fleet-calibrated carve estimate
+  // for an AMD node without a positive APU signal; untrusted community AMD hosts
+  // must not have their host RAM doubled (they could be discrete-GPU boxes).
+  const trustApuFallback = tier === 'foxlight';
+  const clusterHardware = nodes.length ? profileOf(nodes, trustApuFallback) : UNKNOWN_HARDWARE;
   const modelHardware = (modelId: string): { hardware: HardwareProfile; attribution: HardwareAttribution } => {
     const ids = placementNodeIds.get(modelId);
     const placed = ids?.map((id) => nodeById.get(id)).filter((n): n is NodeInfo => n != null) ?? [];
-    if (placed.length > 0) return { hardware: profileOf(placed), attribution: 'placement' };
+    if (placed.length > 0) return { hardware: profileOf(placed, trustApuFallback), attribution: 'placement' };
     if (nodes.length > 0) return { hardware: clusterHardware, attribution: 'cluster' };
     return { hardware: UNKNOWN_HARDWARE, attribution: 'unknown' };
   };

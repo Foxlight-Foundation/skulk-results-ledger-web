@@ -61,19 +61,6 @@ const KNOWN_DISCRETE_GPUS: Record<string, { chip: string; vramGb: number }> = {
   'nvidia h100 nvl': { chip: 'h100', vramGb: 94 },
 };
 
-/**
- * True unified-memory capacity in bytes for a node that snaps to a RAM tier.
- *
- * On an AMD APU (Strix Halo) the OS-visible RAM is only the slice left after the
- * BIOS carves a VRAM region out of the SAME physical DIMMs, so `ram_total` alone
- * understates the machine: a 128GB box with a 64GB carve reports ~61GiB. The GPU
- * addresses the carve PLUS system RAM (unified), so the honest capacity is
- * `ram + carve`. Use the reported carve when the fingerprint carries it; for
- * pre-VRAM fingerprints assume the carve ~= system RAM (the fleet's ~50% Strix
- * config), i.e. total ~= 2x, which lands on the right tier (61->128, 30->64).
- * Apple is already full unified RAM with no carve, and discrete GPUs never reach
- * here, so the adjustment is scoped to AMD.
- */
 /** Coerce a raw byte field to a positive finite number, or null. Community
  *  submissions are only structurally gated (node_id), so a byte field can
  *  arrive as a numeric STRING; without this, `ram + carve` would concatenate
@@ -83,16 +70,51 @@ function positiveFiniteBytes(value: number | null | undefined): number | null {
   return Number.isFinite(n) && n > 0 ? n : null;
 }
 
+/** Per-node memory signals used to resolve a unified APU's true capacity. */
+interface NodeMemorySignals {
+  vramTotalBytes?: number | null;
+  gttTotalBytes?: number | null;
+  /**
+   * Whether to trust the fleet-calibrated carve estimate for an AMD node that
+   * carries no positive APU signal. True only for our own (foxlight) reports,
+   * where every AMD node is a known Strix APU; false for untrusted community
+   * submissions, where an AMD host could be a discrete-GPU box whose host RAM is
+   * not accelerator memory and must not be doubled.
+   */
+  trustApuFallback?: boolean;
+}
+
+/**
+ * True unified-memory capacity in bytes for a node that snaps to a RAM tier.
+ *
+ * On an AMD APU (Strix Halo) the OS-visible RAM is only the slice left after the
+ * BIOS carves a VRAM region out of the SAME physical DIMMs, so `ram_total` alone
+ * understates the machine: a 128GB box with a 64GB carve reports ~61GiB. The GPU
+ * addresses the carve PLUS system RAM, so the honest capacity is `ram + carve`.
+ *
+ * A node is treated as a unified APU when `gtt_total >= ram_total` (the GPU can
+ * map system RAM -- the same test Skulk's placement uses); that holds for any
+ * provenance tier, so a community Strix classifies correctly and a community
+ * discrete-GPU host (small GTT) does not. When the fingerprint predates the
+ * vram/gtt fields there is no signal, so the carve estimate (carve ~= system
+ * RAM, i.e. total ~= 2x) is applied ONLY for trusted foxlight reports; untrusted
+ * AMD nodes fall through to the plain RAM reading rather than a doubled guess.
+ * Apple is already full unified RAM with no carve; discrete GPUs never reach here.
+ */
 function unifiedCapacityBytes(
   vendor: string | null,
   ramTotalBytes: number | null | undefined,
-  vramTotalBytes: number | null | undefined,
+  mem: NodeMemorySignals,
 ): number | null {
   const ram = positiveFiniteBytes(ramTotalBytes);
   if (ram == null) return null;
   if (vendor !== 'amd') return ram;
-  const carve = positiveFiniteBytes(vramTotalBytes) ?? ram;
-  return ram + carve;
+  const vram = positiveFiniteBytes(mem.vramTotalBytes);
+  const gtt = positiveFiniteBytes(mem.gttTotalBytes);
+  const isUnifiedApu = gtt != null && gtt >= ram;
+  if (isUnifiedApu) return ram + (vram ?? ram);
+  if (mem.trustApuFallback) return ram + (vram ?? ram);
+  return ram;
 }
 
 /** Canonical class for one node, e.g. `apple-16gb` or `nvidia-a40-48gb`. */
@@ -100,7 +122,7 @@ export function classifyNode(
   acceleratorVendor: string | null | undefined,
   ramTotalBytes: number | null | undefined,
   acceleratorName?: string | null,
-  vramTotalBytes?: number | null,
+  mem: NodeMemorySignals = {},
 ): string {
   const vendor = acceleratorVendor?.toLowerCase().trim() || null;
   if (vendor && DISCRETE_GPU_VENDORS.has(vendor)) {
@@ -110,7 +132,7 @@ export function classifyNode(
     // Unknown chip: vendor-only beats a host-RAM tier that misstates the GPU.
     return vendor;
   }
-  const tier = memoryTierGb(unifiedCapacityBytes(vendor, ramTotalBytes, vramTotalBytes));
+  const tier = memoryTierGb(unifiedCapacityBytes(vendor, ramTotalBytes, mem));
   if (!vendor && tier == null) return 'unknown';
   if (!vendor) return `unknown-${tier}gb`;
   if (tier == null) return vendor;
@@ -157,12 +179,21 @@ export function profileOf(
     ramTotalBytes: number | null;
     acceleratorName?: string | null;
     vramTotalBytes?: number | null;
+    gttTotalBytes?: number | null;
   }[],
+  // Trust the fleet-calibrated carve estimate for AMD nodes lacking a positive
+  // APU signal. Set only for our own (foxlight) reports; never for untrusted
+  // community submissions, where an AMD host could be a discrete-GPU box.
+  trustApuFallback = false,
 ): HardwareProfile {
   if (nodes.length === 0) return UNKNOWN_HARDWARE;
   const counts = new Map<string, number>();
   for (const n of nodes) {
-    const cls = classifyNode(n.acceleratorVendor, n.ramTotalBytes, n.acceleratorName, n.vramTotalBytes);
+    const cls = classifyNode(n.acceleratorVendor, n.ramTotalBytes, n.acceleratorName, {
+      vramTotalBytes: n.vramTotalBytes,
+      gttTotalBytes: n.gttTotalBytes,
+      trustApuFallback,
+    });
     counts.set(cls, (counts.get(cls) ?? 0) + 1);
   }
   const classes = [...counts.keys()].sort();

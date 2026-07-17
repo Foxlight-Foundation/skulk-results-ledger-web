@@ -107,6 +107,13 @@ export interface NodeInfo {
    * the node's true unified capacity.
    */
   vramTotalBytes: number | null;
+  /**
+   * GTT aperture in bytes: host RAM the GPU can additionally map. `gtt >= ram`
+   * is the positive signal that a node is a unified APU (the GPU addresses
+   * system RAM), used to add the VRAM carve on any provenance tier. Null when
+   * the fingerprint predates the field.
+   */
+  gttTotalBytes: number | null;
   skulkVersion: string | null;
 }
 
