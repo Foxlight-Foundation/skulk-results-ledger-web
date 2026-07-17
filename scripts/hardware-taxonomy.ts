@@ -74,15 +74,25 @@ const KNOWN_DISCRETE_GPUS: Record<string, { chip: string; vramGb: number }> = {
  * Apple is already full unified RAM with no carve, and discrete GPUs never reach
  * here, so the adjustment is scoped to AMD.
  */
+/** Coerce a raw byte field to a positive finite number, or null. Community
+ *  submissions are only structurally gated (node_id), so a byte field can
+ *  arrive as a numeric STRING; without this, `ram + carve` would concatenate
+ *  strings ("64..." + "64...") and mis-tier the node as a giant. */
+function positiveFiniteBytes(value: number | null | undefined): number | null {
+  const n = typeof value === 'number' ? value : Number(value);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 function unifiedCapacityBytes(
   vendor: string | null,
   ramTotalBytes: number | null | undefined,
   vramTotalBytes: number | null | undefined,
 ): number | null {
-  if (ramTotalBytes == null || ramTotalBytes <= 0) return ramTotalBytes ?? null;
-  if (vendor !== 'amd') return ramTotalBytes;
-  const carve = vramTotalBytes != null && vramTotalBytes > 0 ? vramTotalBytes : ramTotalBytes;
-  return ramTotalBytes + carve;
+  const ram = positiveFiniteBytes(ramTotalBytes);
+  if (ram == null) return null;
+  if (vendor !== 'amd') return ram;
+  const carve = positiveFiniteBytes(vramTotalBytes) ?? ram;
+  return ram + carve;
 }
 
 /** Canonical class for one node, e.g. `apple-16gb` or `nvidia-a40-48gb`. */
