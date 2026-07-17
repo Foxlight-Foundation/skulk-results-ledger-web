@@ -61,11 +61,36 @@ const KNOWN_DISCRETE_GPUS: Record<string, { chip: string; vramGb: number }> = {
   'nvidia h100 nvl': { chip: 'h100', vramGb: 94 },
 };
 
+/**
+ * True unified-memory capacity in bytes for a node that snaps to a RAM tier.
+ *
+ * On an AMD APU (Strix Halo) the OS-visible RAM is only the slice left after the
+ * BIOS carves a VRAM region out of the SAME physical DIMMs, so `ram_total` alone
+ * understates the machine: a 128GB box with a 64GB carve reports ~61GiB. The GPU
+ * addresses the carve PLUS system RAM (unified), so the honest capacity is
+ * `ram + carve`. Use the reported carve when the fingerprint carries it; for
+ * pre-VRAM fingerprints assume the carve ~= system RAM (the fleet's ~50% Strix
+ * config), i.e. total ~= 2x, which lands on the right tier (61->128, 30->64).
+ * Apple is already full unified RAM with no carve, and discrete GPUs never reach
+ * here, so the adjustment is scoped to AMD.
+ */
+function unifiedCapacityBytes(
+  vendor: string | null,
+  ramTotalBytes: number | null | undefined,
+  vramTotalBytes: number | null | undefined,
+): number | null {
+  if (ramTotalBytes == null || ramTotalBytes <= 0) return ramTotalBytes ?? null;
+  if (vendor !== 'amd') return ramTotalBytes;
+  const carve = vramTotalBytes != null && vramTotalBytes > 0 ? vramTotalBytes : ramTotalBytes;
+  return ramTotalBytes + carve;
+}
+
 /** Canonical class for one node, e.g. `apple-16gb` or `nvidia-a40-48gb`. */
 export function classifyNode(
   acceleratorVendor: string | null | undefined,
   ramTotalBytes: number | null | undefined,
   acceleratorName?: string | null,
+  vramTotalBytes?: number | null,
 ): string {
   const vendor = acceleratorVendor?.toLowerCase().trim() || null;
   if (vendor && DISCRETE_GPU_VENDORS.has(vendor)) {
@@ -75,7 +100,7 @@ export function classifyNode(
     // Unknown chip: vendor-only beats a host-RAM tier that misstates the GPU.
     return vendor;
   }
-  const tier = memoryTierGb(ramTotalBytes);
+  const tier = memoryTierGb(unifiedCapacityBytes(vendor, ramTotalBytes, vramTotalBytes));
   if (!vendor && tier == null) return 'unknown';
   if (!vendor) return `unknown-${tier}gb`;
   if (tier == null) return vendor;
@@ -117,12 +142,17 @@ export const UNKNOWN_HARDWARE: HardwareProfile = {
  * Label counts per class in a stable order, e.g. `2x Apple 16GB + 1x AMD 64GB`.
  */
 export function profileOf(
-  nodes: { acceleratorVendor: string | null; ramTotalBytes: number | null; acceleratorName?: string | null }[],
+  nodes: {
+    acceleratorVendor: string | null;
+    ramTotalBytes: number | null;
+    acceleratorName?: string | null;
+    vramTotalBytes?: number | null;
+  }[],
 ): HardwareProfile {
   if (nodes.length === 0) return UNKNOWN_HARDWARE;
   const counts = new Map<string, number>();
   for (const n of nodes) {
-    const cls = classifyNode(n.acceleratorVendor, n.ramTotalBytes, n.acceleratorName);
+    const cls = classifyNode(n.acceleratorVendor, n.ramTotalBytes, n.acceleratorName, n.vramTotalBytes);
     counts.set(cls, (counts.get(cls) ?? 0) + 1);
   }
   const classes = [...counts.keys()].sort();

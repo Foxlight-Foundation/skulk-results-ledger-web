@@ -89,6 +89,11 @@ interface RawNode {
   ram_total_bytes?: number | null;
   accelerator_vendor?: string | null;
   accelerator_name?: string | null;
+  // VRAM carve for unified-memory APUs (AMD Strix); lets the taxonomy report the
+  // node's true capacity (ram + carve) instead of the post-carve OS-visible RAM.
+  // Absent on pre-VRAM fingerprints (the taxonomy then assumes a ~50% carve).
+  vram_total_bytes?: number | null;
+  gtt_total_bytes?: number | null;
   skulk_version?: string | null;
 }
 interface RawFingerprint {
@@ -218,6 +223,7 @@ function nodesFrom(report: RawReport): NodeInfo[] {
     ramTotalBytes: n.ram_total_bytes ?? null,
     acceleratorVendor: n.accelerator_vendor ?? null,
     acceleratorName: n.accelerator_name ?? null,
+    vramTotalBytes: n.vram_total_bytes ?? null,
     skulkVersion: n.skulk_version ?? null,
   }));
 }

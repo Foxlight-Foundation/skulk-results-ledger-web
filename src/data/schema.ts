@@ -100,6 +100,13 @@ export interface NodeInfo {
   acceleratorVendor: string | null;
   /** Marketing name of the accelerator (e.g. `NVIDIA A40`), null when unmeasured. */
   acceleratorName: string | null;
+  /**
+   * VRAM carve for a unified-memory APU (AMD Strix), in bytes; null when the
+   * fingerprint predates the field. On such a node `ramTotalBytes` is only the
+   * post-carve OS-visible slice, so the taxonomy adds this carve back to report
+   * the node's true unified capacity.
+   */
+  vramTotalBytes: number | null;
   skulkVersion: string | null;
 }
 
