@@ -1,8 +1,8 @@
 import {
+  Bar,
+  BarChart,
   CartesianGrid,
   Legend,
-  Line,
-  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -24,9 +24,10 @@ import {
  * Throughput vs concurrency for one sweep: aggregate tok/s (climbs as batching
  * amortizes work across simultaneous clients) against per-request p50 tok/s
  * (falls as each client shares the engine). The crossing pair IS the batching
- * story -- a flat aggregate line means the engine serializes; a rising one
- * means added clients buy real throughput. X is the sweep's concurrency level
- * on a log scale so 1..64 spreads evenly.
+ * story -- flat amber bars mean the engine serializes; growing ones mean added
+ * clients buy real throughput. Levels are discrete sweep points (1, 4, 8, ...),
+ * so grouped bars per level are the honest grammar -- a line would imply a
+ * continuum between levels that was never measured.
  */
 export function ConcurrencyChart({ curve }: { curve: ConcurrencyCurve }) {
   const palette = useChartPalette();
@@ -54,14 +55,11 @@ export function ConcurrencyChart({ curve }: { curve: ConcurrencyCurve }) {
         </ChartHint>
       </ChartHeading>
       <ResponsiveContainer width="100%" height={300}>
-        <LineChart data={series} margin={{ top: 12, right: 20, bottom: 8, left: 4 }}>
-          <CartesianGrid stroke={palette.grid} />
+        <BarChart data={series} margin={{ top: 12, right: 20, bottom: 8, left: 4 }} barCategoryGap="25%">
+          <CartesianGrid stroke={palette.grid} vertical={false} />
           <XAxis
             dataKey="concurrency"
-            type="number"
-            scale="log"
-            domain={['dataMin', 'dataMax']}
-            ticks={series.map((s) => s.concurrency)}
+            type="category"
             stroke={palette.axis}
             tick={{ fill: palette.axis, fontFamily: palette.font, fontSize: 11 }}
             label={{
@@ -99,27 +97,21 @@ export function ConcurrencyChart({ curve }: { curve: ConcurrencyCurve }) {
           <Legend
             wrapperStyle={{ fontFamily: palette.font, fontSize: 11, color: palette.axis }}
           />
-          <Line
-            type="monotone"
+          <Bar
             dataKey="aggregate"
             name="aggregate"
-            stroke={palette.amber}
-            strokeWidth={2}
-            dot={{ r: 3, fill: palette.amber }}
-            connectNulls
+            fill={palette.amber}
+            radius={[3, 3, 0, 0]}
             isAnimationActive={false}
           />
-          <Line
-            type="monotone"
+          <Bar
             dataKey="perRequest"
             name="per-request p50"
-            stroke={palette.cyan}
-            strokeWidth={2}
-            dot={{ r: 3, fill: palette.cyan }}
-            connectNulls
+            fill={palette.cyan}
+            radius={[3, 3, 0, 0]}
             isAnimationActive={false}
           />
-        </LineChart>
+        </BarChart>
       </ResponsiveContainer>
     </ChartCard>
   );
