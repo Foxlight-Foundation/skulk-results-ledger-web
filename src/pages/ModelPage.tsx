@@ -62,7 +62,16 @@ export function ModelPage() {
   const concurrencyCurves = [
     ...new Map(
       (data.concurrencyCurves ?? [])
-        .filter((c) => c.tier === 'foxlight' && isWithinWindow(c.startedAt, window, now))
+        .filter(
+          (c) =>
+            c.tier === 'foxlight' &&
+            isWithinWindow(c.startedAt, window, now) &&
+            // Only curves the chart can actually draw compete for the
+            // latest-per-hardware slot: a newer sweep whose levels all failed
+            // (no throughput recorded) must not shadow an older valid curve
+            // and leave the section blank.
+            c.points.some((p) => p.aggregateTps != null || p.perRequestTpsP50 != null),
+        )
         .map((c) => [c.hardwareLabel, c] as const),
     ).values(),
   ];
