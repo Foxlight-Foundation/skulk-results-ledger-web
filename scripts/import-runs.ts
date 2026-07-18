@@ -535,7 +535,11 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
       (e.result.concurrencyPoints?.length ?? 0) > 0 &&
       e.result.plainPassCount + e.result.plainFailCount === 0;
     const entries = allEntries.filter((e) => !isSweepOnly(e));
-    const nodes = allEntries.at(-1)?.detail.nodes ?? [];
+    // Family's homogeneous-vendor fallback must read the nodes of the latest
+    // DECODE entry (what the Explorer row's history describes), not a newer
+    // sweep-only run that may have landed on different hardware; sweep-only
+    // nodes are only a last resort when a model has nothing but sweeps.
+    const nodes = (entries.at(-1) ?? allEntries.at(-1))?.detail.nodes ?? [];
     const timeline: ModelTimePoint[] = entries.map(({ detail, result }) => {
       const total = result.plainPassCount + result.plainFailCount;
       const credible =
