@@ -388,7 +388,14 @@ function buildRunDetail(
     const plainPassCount = plain.filter((r) => r.passed).length;
     const plainFailCount = plain.length - plainPassCount;
     const issueCount = rs.reduce((n, r) => n + (r.issues?.length ?? 0), 0);
-    const reps = new Set(rs.map((r) => r.repetition)).size;
+    // Caveats are trust markers on the DECODE measurement (the aggregates and
+    // timeline chips they render beside are plain-only), so their inputs must
+    // come from plain rows too: a sweep-level failure/issue must not stamp
+    // has_failures/issue_marked onto a decode point whose pass rate excludes
+    // it, and sweep reps must not mask single_rep on a lone plain sample.
+    // Sweep failures stay visible in run-detail counts and curve points.
+    const plainIssueCount = plain.reduce((n, r) => n + (r.issues?.length ?? 0), 0);
+    const plainReps = new Set(plain.map((r) => r.repetition)).size;
     const { hardware, attribution } = modelHardware(modelId);
     models.push({
       modelId,
@@ -398,7 +405,7 @@ function buildRunDetail(
       nodeCount: placementNodes.get(modelId) ?? 0,
       decodeTps: decode,
       ttft,
-      caveats: modelCaveats(decode, failCount, issueCount, reps),
+      caveats: modelCaveats(decode, plainFailCount, plainIssueCount, plainReps),
       hardware,
       hardwareAttribution: attribution,
       concurrencyPoints,
