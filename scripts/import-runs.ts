@@ -502,9 +502,19 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
   }
 
   const histories: ModelHistory[] = [];
-  for (const [modelId, entries] of byModel) {
-    entries.sort((a, b) => (a.detail.startedAt ?? '').localeCompare(b.detail.startedAt ?? ''));
-    const nodes = entries.at(-1)?.detail.nodes ?? [];
+  for (const [modelId, allEntries] of byModel) {
+    allEntries.sort((a, b) => (a.detail.startedAt ?? '').localeCompare(b.detail.startedAt ?? ''));
+    // A sweep-only entry carries concurrency points and no plain samples at
+    // all. It feeds the concurrency curves ONLY: letting it into the timeline
+    // and run/pass rollups would re-pollute exactly what the sweep exclusion
+    // removed (a 271-request sweep would dominate the model's pass rate, and
+    // Explorer run counts would count sweeps as decode runs).
+    const isSweepOnly = (e: (typeof allEntries)[number]) =>
+      (e.result.concurrencyPoints?.length ?? 0) > 0 &&
+      e.result.decodeTps.sampleCount + e.result.decodeTps.shortSampleCount === 0 &&
+      e.result.ttft.sampleCount === 0;
+    const entries = allEntries.filter((e) => !isSweepOnly(e));
+    const nodes = allEntries.at(-1)?.detail.nodes ?? [];
     const timeline: ModelTimePoint[] = entries.map(({ detail, result }) => {
       const total = result.passCount + result.failCount;
       const credible =
@@ -560,7 +570,7 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
 
     // Concurrency sweeps: one curve per run that carried them, sorted by run
     // start (the site shows the latest foxlight curve per hardware label).
-    const concurrencyCurves: ConcurrencyCurve[] = entries
+    const concurrencyCurves: ConcurrencyCurve[] = allEntries
       .filter((e) => (e.result.concurrencyPoints?.length ?? 0) > 0)
       .map((e) => ({
         runId: e.detail.runId,
@@ -671,7 +681,10 @@ function buildSuites(details: RunDetail[]): SuiteRollup[] {
 }
 
 function toRollup(h: ModelHistory): ModelRollup {
-  const { timeline: _t, ...rollup } = h;
+  // Strip the heavy per-model arrays: the Explorer/Hardware views never read
+  // them, and serializing every sweep's point arrays into index.json would
+  // bloat the initial payload (the Model page fetches the full history).
+  const { timeline: _t, concurrencyCurves: _c, ...rollup } = h;
   return rollup;
 }
 

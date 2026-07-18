@@ -192,15 +192,6 @@ export function ModelPage() {
         <>
           <TrendChart timeline={timeline} />
 
-          {concurrencyCurves.length > 0 && (
-            <>
-              <Section>Concurrency</Section>
-              {concurrencyCurves.map((curve) => (
-                <ConcurrencyChart key={curve.runId + curve.hardwareLabel} curve={curve} />
-              ))}
-            </>
-          )}
-
           <Section>Every run</Section>
           <SortableTable
             columns={columns}
@@ -210,6 +201,15 @@ export function ModelPage() {
             initialSortKey="date"
             initialSortDir="desc"
           />
+        </>
+      )}
+
+      {concurrencyCurves.length > 0 && (
+        <>
+          <Section>Concurrency</Section>
+          {concurrencyCurves.map((curve) => (
+            <ConcurrencyChart key={curve.runId + curve.hardwareLabel} curve={curve} />
+          ))}
         </>
       )}
     </Page>
