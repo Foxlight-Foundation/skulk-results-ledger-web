@@ -100,6 +100,20 @@ export interface NodeInfo {
   acceleratorVendor: string | null;
   /** Marketing name of the accelerator (e.g. `NVIDIA A40`), null when unmeasured. */
   acceleratorName: string | null;
+  /**
+   * VRAM carve for a unified-memory APU (AMD Strix), in bytes; null when the
+   * fingerprint predates the field. On such a node `ramTotalBytes` is only the
+   * post-carve OS-visible slice, so the taxonomy adds this carve back to report
+   * the node's true unified capacity.
+   */
+  vramTotalBytes: number | null;
+  /**
+   * GTT aperture in bytes: host RAM the GPU can additionally map. `gtt >= ram`
+   * is the positive signal that a node is a unified APU (the GPU addresses
+   * system RAM), used to add the VRAM carve on any provenance tier. Null when
+   * the fingerprint predates the field.
+   */
+  gttTotalBytes: number | null;
   skulkVersion: string | null;
 }
 
