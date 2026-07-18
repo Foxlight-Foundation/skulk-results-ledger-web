@@ -175,6 +175,21 @@ function decodeOf(m: RawMetrics): number | null {
   return wallTps ?? m.skulk_generation_tps ?? null;
 }
 
+function decodeIsEstimated(m: RawMetrics): boolean {
+  // decodeOf returns a MEASURED decode rate only when it can subtract a real
+  // TTFT from a real wall window over a real output-token count. Every other
+  // branch (missing tokens, missing/zero TTFT, or a degenerate window) falls
+  // back to raw whole-request throughput, which folds in prompt/TTFT time and
+  // must be flagged as an estimate per the methodology page's promise that
+  // wall-throughput fallbacks are labeled.
+  const tokens = tokensOf(m);
+  const wallTps = m.wall_tps;
+  const ttft = m.ttft_s;
+  if (tokens == null || tokens <= 0 || wallTps == null || wallTps <= 0) return true;
+  if (ttft == null || ttft <= 0) return true;
+  return tokens / wallTps - ttft <= 0;
+}
+
 function aggregate(
   metric: string,
   unit: string,
@@ -329,7 +344,10 @@ function buildRunDetail(
   const runCaveats: Caveat[] = [];
   if (!hasFingerprint) runCaveats.push('missing_fingerprint');
   if (failCount > 0) runCaveats.push('has_failures');
-  if (results.some((r) => decodeOf(r.metrics) == null && r.metrics.wall_tps == null)) {
+  // Flag whenever a result carries a decode value that came from the raw
+  // wall-throughput fallback rather than a measured decode window -- not only
+  // the no-data case. Keeps the caveat honest with the methodology page.
+  if (results.some((r) => decodeOf(r.metrics) != null && decodeIsEstimated(r.metrics))) {
     runCaveats.push('decode_tps_estimated');
   }
 
