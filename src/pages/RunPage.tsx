@@ -191,22 +191,23 @@ export function RunPage() {
           <Section>Cluster</Section>
           <Grid $min="200px">
             {data.nodes.map((n) => {
-              // Show the capacity the hardware class tiers on, never the raw
-              // post-carve OS slice (61.4 GB beside "AMD 128GB" reads as a
-              // contradiction). The split lives in the hover title.
-              const capacity = n.unifiedCapacityBytes ?? n.ramTotalBytes;
+              // Show the node's nominal memory (the size its hardware class
+              // carries -- a 128GB Strix reads 128 GB), never the post-carve
+              // OS slice. The BIOS-split arithmetic is fine print on hover.
               const carved =
-                capacity != null && n.ramTotalBytes != null && capacity > n.ramTotalBytes;
-              const split = carved
+                n.memoryGb != null &&
+                n.ramTotalBytes != null &&
+                n.memoryGb * 1024 ** 3 > n.ramTotalBytes * 1.1;
+              const finePrint = carved
                 ? n.vramTotalBytes != null
-                  ? `${formatBytes(n.ramTotalBytes)} system + ${formatBytes(n.vramTotalBytes)} VRAM carve (unified)`
-                  : `${formatBytes(n.ramTotalBytes)} system + estimated BIOS carve (unified)`
+                  ? `unified memory: ${formatBytes(n.ramTotalBytes)} OS-visible + ${formatBytes(n.vramTotalBytes)} VRAM carve`
+                  : `unified memory: ${formatBytes(n.ramTotalBytes)} OS-visible after the BIOS VRAM carve`
                 : undefined;
               return (
                 <Meta key={n.nodeId}>
                   <MetaLabel>{n.friendlyName ?? n.nodeId.slice(0, 10)}</MetaLabel>
-                  <MetaValue title={split}>
-                    {formatBytes(capacity)}
+                  <MetaValue title={finePrint}>
+                    {n.memoryGb != null ? `${n.memoryGb} GB` : formatBytes(n.ramTotalBytes)}
                     {n.acceleratorVendor ? ` · ${n.acceleratorVendor}` : ''}
                     {n.skulkVersion ? ` · ${n.skulkVersion}` : ''}
                   </MetaValue>

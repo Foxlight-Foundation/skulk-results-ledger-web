@@ -115,13 +115,13 @@ export interface NodeInfo {
    */
   gttTotalBytes: number | null;
   /**
-   * The capacity the hardware taxonomy tiers this node on: plain RAM for most
-   * nodes, RAM plus the VRAM carve for a unified-memory APU (real signal or
-   * trusted estimate). RENDER THIS, never `ramTotalBytes`, when showing a
-   * node's memory -- the raw figure is the post-carve OS slice and would
-   * contradict the node's hardware class (61.4 GB beside "AMD 128GB").
+   * The node's nominal memory in GB -- the taxonomy tier its hardware class
+   * carries (a 128GB Strix reads 128, not the 61.4GiB post-carve OS slice or
+   * a 122.9 summed estimate). RENDER THIS when showing a node's memory; the
+   * OS-slice/carve arithmetic is fine print for a tooltip at most, because a
+   * reader cares what the node IS, not how the BIOS split it.
    */
-  unifiedCapacityBytes: number | null;
+  memoryGb: number | null;
   skulkVersion: string | null;
 }
 
