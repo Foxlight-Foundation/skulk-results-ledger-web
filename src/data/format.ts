@@ -35,7 +35,7 @@ export const CAVEAT_META: Record<Caveat, { label: string; tone: 'warn' | 'fail' 
     label: 'throughput estimate',
     tone: 'neutral',
     description:
-      'This run lacks the output-token and wall-throughput fields needed to compute the decode window (output tokens over wall minus TTFT), so its decode rate falls back to a raw throughput estimate.',
+      "This run couldn't measure a decode window (output tokens over wall minus TTFT) for at least one result -- missing output tokens, a missing or unusable TTFT, or no wall throughput -- so its decode rate falls back to raw whole-request throughput, which folds in prompt/TTFT time.",
   },
   has_failures: {
     label: 'failures',

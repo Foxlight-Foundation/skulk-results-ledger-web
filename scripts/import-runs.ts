@@ -170,9 +170,11 @@ function decodeOf(m: RawMetrics): number | null {
     // window is unmeasurable, so report the raw observed throughput.
     return wallTps;
   }
-  // No usable token/throughput components: fall back to whatever rate exists,
-  // preferring observed wall throughput over the server self-report.
-  return wallTps ?? m.skulk_generation_tps ?? null;
+  // No usable decode window. Prefer POSITIVE observed wall throughput over the
+  // server self-report; a zero/negative wall_tps is not usable (`??` would keep
+  // it, since it only skips nullish), so fall through to the native rate.
+  if (wallTps != null && wallTps > 0) return wallTps;
+  return m.skulk_generation_tps ?? null;
 }
 
 function decodeIsEstimated(m: RawMetrics): boolean {
