@@ -2,6 +2,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import styled from 'styled-components';
 
 import { CaveatList, Chip, FamilyBadge, PassRateChip } from '../components/Chip';
+import { ConcurrencyChart } from '../components/charts/ConcurrencyChart';
 import { TrendChart } from '../components/charts/TrendChart';
 import { BigNumber, Eyebrow, Grid, InlineLink, Muted, Page, Panel, Row } from '../components/primitives';
 import { SortableTable, type Column } from '../components/SortableTable';
@@ -54,6 +55,17 @@ export function ModelPage() {
   // period. Everything below reflects only runs in the window.
   const w = windowRollup(data, window, now);
   const timeline = data.timeline.filter((t) => isWithinWindow(t.startedAt, window, now));
+  // Latest foxlight concurrency sweep per hardware label, respecting the
+  // selected time window; curves are already sorted by run start, so the last
+  // per label wins. Community curves stay out of this headline view (tiers
+  // never blend), same rule as hardware cells.
+  const concurrencyCurves = [
+    ...new Map(
+      (data.concurrencyCurves ?? [])
+        .filter((c) => c.tier === 'foxlight' && isWithinWindow(c.startedAt, window, now))
+        .map((c) => [c.hardwareLabel, c] as const),
+    ).values(),
+  ];
 
   const columns: Column<ModelTimePoint>[] = [
     {
@@ -179,6 +191,15 @@ export function ModelPage() {
       ) : (
         <>
           <TrendChart timeline={timeline} />
+
+          {concurrencyCurves.length > 0 && (
+            <>
+              <Section>Concurrency</Section>
+              {concurrencyCurves.map((curve) => (
+                <ConcurrencyChart key={curve.runId + curve.hardwareLabel} curve={curve} />
+              ))}
+            </>
+          )}
 
           <Section>Every run</Section>
           <SortableTable

@@ -24,6 +24,8 @@ import type {
   CacheClass,
   ProvenanceTier,
   Caveat,
+  ConcurrencyCurve,
+  ConcurrencyPoint,
   EngineFamily,
   HardwareAttribution,
   HardwareCell,
@@ -66,6 +68,18 @@ interface RawMetrics {
   wall_tps?: number | null;
   skulk_generation_tps?: number | null;
   skulk_generation_tokens?: number | null;
+  // Concurrency-sweep fields (harness `concurrent` test kind). `concurrency`
+  // present marks the result as a sweep level, whose throughput is an AGGREGATE
+  // across simultaneous clients -- never a decode rate.
+  concurrency?: number | null;
+  aggregate_generation_tps?: number | null;
+  per_request_generation_tps_p50?: number | null;
+  per_request_generation_tps_p90?: number | null;
+  ttft_p50_s?: number | null;
+  ttft_p90_s?: number | null;
+  concurrent_total_requests?: number | null;
+  concurrent_succeeded?: number | null;
+  concurrent_failed?: number | null;
 }
 interface RawIssue {
   severity?: string;
@@ -149,6 +163,36 @@ function tokensOf(m: RawMetrics): number | null {
 function isShort(m: RawMetrics): boolean {
   const t = tokensOf(m);
   return t == null || t < SHORT_OUTPUT_TOKENS;
+}
+
+function isConcurrent(m: RawMetrics): boolean {
+  // A result from a concurrency sweep. Its skulk_generation_tps is the
+  // AGGREGATE across N simultaneous clients, so folding it into the decode
+  // aggregates would bake a median-of-aggregates-across-levels into the
+  // model's history as a fake decode rate (observed: a 1B GGUF showing a
+  // "credible" 678 tok/s decode that was really the c1..c64 aggregate median).
+  return m.concurrency != null;
+}
+
+function finiteOrNull(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function concurrencyPointsOf(results: RawResult[]): ConcurrencyPoint[] {
+  return results
+    .filter((r) => isConcurrent(r.metrics))
+    .map((r) => ({
+      concurrency: r.metrics.concurrency as number,
+      aggregateTps: finiteOrNull(r.metrics.aggregate_generation_tps),
+      perRequestTpsP50: finiteOrNull(r.metrics.per_request_generation_tps_p50),
+      perRequestTpsP90: finiteOrNull(r.metrics.per_request_generation_tps_p90),
+      ttftP50S: finiteOrNull(r.metrics.ttft_p50_s),
+      ttftP90S: finiteOrNull(r.metrics.ttft_p90_s),
+      totalRequests: finiteOrNull(r.metrics.concurrent_total_requests),
+      succeeded: finiteOrNull(r.metrics.concurrent_succeeded),
+      failed: finiteOrNull(r.metrics.concurrent_failed),
+    }))
+    .sort((a, b) => a.concurrency - b.concurrency);
 }
 
 function decodeOf(m: RawMetrics): number | null {
@@ -332,8 +376,13 @@ function buildRunDetail(
 
   const models: RunModelResult[] = [];
   for (const [modelId, rs] of byModel) {
-    const decode = aggregate('decode_tps', 'tok/s', rs, decodeOf, true);
-    const ttft = aggregate('ttft_s', 's', rs, (m) => m.ttft_s ?? null, false);
+    // Concurrency-sweep results are surfaced as their own curve; the plain
+    // decode/ttft aggregates must never include them (aggregate throughput
+    // across N clients is not a decode rate).
+    const plain = rs.filter((r) => !isConcurrent(r.metrics));
+    const decode = aggregate('decode_tps', 'tok/s', plain, decodeOf, true);
+    const ttft = aggregate('ttft_s', 's', plain, (m) => m.ttft_s ?? null, false);
+    const concurrencyPoints = concurrencyPointsOf(rs);
     const passCount = rs.filter((r) => r.passed).length;
     const failCount = rs.length - passCount;
     const issueCount = rs.reduce((n, r) => n + (r.issues?.length ?? 0), 0);
@@ -350,6 +399,7 @@ function buildRunDetail(
       caveats: modelCaveats(decode, failCount, issueCount, reps),
       hardware,
       hardwareAttribution: attribution,
+      concurrencyPoints,
     });
   }
   models.sort((a, b) => a.modelId.localeCompare(b.modelId));
@@ -365,7 +415,14 @@ function buildRunDetail(
   // Flag whenever a result carries a decode value that came from the raw
   // wall-throughput fallback rather than a measured decode window -- not only
   // the no-data case. Keeps the caveat honest with the methodology page.
-  if (results.some((r) => decodeOf(r.metrics) != null && decodeIsEstimated(r.metrics))) {
+  if (
+    results.some(
+      (r) =>
+        !isConcurrent(r.metrics) &&
+        decodeOf(r.metrics) != null &&
+        decodeIsEstimated(r.metrics),
+    )
+  ) {
     runCaveats.push('decode_tps_estimated');
   }
 
@@ -501,6 +558,19 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
     });
     hardwareCells.sort((a, b) => b.runCount - a.runCount);
 
+    // Concurrency sweeps: one curve per run that carried them, sorted by run
+    // start (the site shows the latest foxlight curve per hardware label).
+    const concurrencyCurves: ConcurrencyCurve[] = entries
+      .filter((e) => (e.result.concurrencyPoints?.length ?? 0) > 0)
+      .map((e) => ({
+        runId: e.detail.runId,
+        startedAt: e.detail.startedAt,
+        hardwareLabel: e.result.hardware.label,
+        hardwareClasses: e.result.hardware.classes,
+        tier: e.detail.tier,
+        points: e.result.concurrencyPoints as ConcurrencyPoint[],
+      }));
+
     // Headline numbers rest on credible FOXLIGHT points only: tiers never
     // blend, and a single-rep wall spike can never set the record. Community
     // points stay in the timeline, badged.
@@ -549,6 +619,7 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
         nodeCount: t.nodeCount,
       })),
       timeline,
+      concurrencyCurves,
     });
   }
   histories.sort((a, b) => (b.decodeTpsTypical ?? -1) - (a.decodeTpsTypical ?? -1));

@@ -8,7 +8,7 @@
  * it is declared here; if the site reads a field, it is declared here.
  */
 
-export const LEDGER_SCHEMA_VERSION = '1.4';
+export const LEDGER_SCHEMA_VERSION = '1.5';
 
 /**
  * Provenance tier (the open-ledger's load-bearing concept): `foxlight` =
@@ -145,6 +145,39 @@ export interface RunSummary {
   submitter: string | null;
 }
 
+/**
+ * One level of a throughput-vs-concurrency sweep: N simultaneous clients
+ * against one model instance. Aggregate rises with batching while per-request
+ * falls; the pair is the batching story, and neither is a plain decode rate,
+ * so these points live OUTSIDE the decode aggregates/timeline (a median of
+ * aggregates across levels is physically meaningless).
+ */
+export interface ConcurrencyPoint {
+  /** Simultaneous client count for this level (1, 4, 8, ...). */
+  concurrency: number;
+  /** Total generation throughput across all concurrent requests, tok/s. */
+  aggregateTps: number | null;
+  /** Median single-request decode rate at this level, tok/s. */
+  perRequestTpsP50: number | null;
+  perRequestTpsP90: number | null;
+  ttftP50S: number | null;
+  ttftP90S: number | null;
+  totalRequests: number | null;
+  succeeded: number | null;
+  failed: number | null;
+}
+
+/** One run's concurrency sweep for a model, with the hardware that served it. */
+export interface ConcurrencyCurve {
+  runId: string;
+  startedAt: string | null;
+  hardwareLabel: string;
+  hardwareClasses: string[];
+  tier: ProvenanceTier;
+  /** Sweep points sorted by ascending concurrency. */
+  points: ConcurrencyPoint[];
+}
+
 /** One model's result within a single run (for the run-detail view). */
 export interface RunModelResult {
   modelId: string;
@@ -158,6 +191,12 @@ export interface RunModelResult {
   /** Hardware that served this model (exact when attribution is `placement`). */
   hardware: HardwareProfile;
   hardwareAttribution: HardwareAttribution;
+  /**
+   * Concurrency-sweep points from this run's `concurrent`-kind results, which
+   * are EXCLUDED from `decodeTps`/`ttft` (their throughput is an aggregate
+   * across simultaneous clients, not a decode rate). Empty for ordinary runs.
+   */
+  concurrencyPoints?: ConcurrencyPoint[];
 }
 
 /** Full per-run detail file (`public/data/runs/<runId>.json`). */
@@ -279,6 +318,13 @@ export interface ModelRollup {
 /** Full per-model history file (`public/data/models/<slug>.json`). */
 export interface ModelHistory extends ModelRollup {
   timeline: ModelTimePoint[];
+  /**
+   * Throughput-vs-concurrency sweeps recorded for this model, one curve per
+   * run that contained `concurrent`-kind results, sorted by run start. The
+   * site renders the latest foxlight curve per hardware label; older curves
+   * stay for history. Empty when the model has never run a concurrency sweep.
+   */
+  concurrencyCurves: ConcurrencyCurve[];
 }
 
 /** Rollup for one test suite (test set). */
