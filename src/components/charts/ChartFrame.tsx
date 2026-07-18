@@ -33,6 +33,71 @@ export const ChartHint = styled.span`
   color: ${({ theme }) => theme.colors.text3};
 `;
 
+/**
+ * Infographic-style headline block for a chart card: a row of big stat
+ * callouts (value + label) plus a short plain-language explainer, so a reader
+ * gets the chart's takeaway before parsing axes. Reusable by any chart card;
+ * see ConcurrencyChart for the pattern.
+ */
+export const HeadlineRow = styled.div`
+  display: flex;
+  gap: ${({ theme }) => theme.spacing.xl};
+  flex-wrap: wrap;
+  margin-bottom: ${({ theme }) => theme.spacing.md};
+`;
+
+export const HeadlineStat = styled.div``;
+
+export const HeadlineValue = styled.div`
+  font-family: ${({ theme }) => theme.typography.fontFamily.display};
+  font-size: 2rem;
+  font-weight: ${({ theme }) => theme.typography.fontWeight.semibold};
+  color: ${({ theme }) => theme.colors.text1};
+  line-height: 1.1;
+`;
+
+export const HeadlineLabel = styled.div`
+  font-family: ${({ theme }) => theme.typography.fontFamily.mono};
+  font-size: ${({ theme }) => theme.typography.fontSize.eyebrow};
+  text-transform: uppercase;
+  letter-spacing: ${({ theme }) => theme.typography.letterSpacing.eyebrow};
+  color: ${({ theme }) => theme.colors.text3};
+  margin-top: 4px;
+`;
+
+export const HeadlineNote = styled.p`
+  font-size: ${({ theme }) => theme.typography.fontSize.xs};
+  color: ${({ theme }) => theme.colors.text2};
+  max-width: 560px;
+  margin-bottom: ${({ theme }) => theme.spacing.md};
+  line-height: 1.5;
+`;
+
+/** Small pill toggle for switching a chart's rendering (e.g. bars/line). */
+export const ChartToggleGroup = styled.div`
+  display: inline-flex;
+  border: 1px solid ${({ theme }) => theme.colors.border1};
+  border-radius: ${({ theme }) => theme.radii.sm};
+  overflow: hidden;
+`;
+
+export const ChartToggleButton = styled.button<{ $active: boolean }>`
+  font-family: ${({ theme }) => theme.typography.fontFamily.mono};
+  font-size: ${({ theme }) => theme.typography.fontSize.eyebrow};
+  text-transform: uppercase;
+  letter-spacing: ${({ theme }) => theme.typography.letterSpacing.eyebrow};
+  padding: 4px 10px;
+  border: none;
+  cursor: pointer;
+  background: ${({ theme, $active }) => ($active ? theme.colors.border1 : 'transparent')};
+  color: ${({ theme, $active }) => ($active ? theme.colors.text1 : theme.colors.text3)};
+  transition: color 120ms ease, background 120ms ease;
+
+  &:hover {
+    color: ${({ theme }) => theme.colors.text1};
+  }
+`;
+
 const TooltipBox = styled.div`
   background: ${({ theme }) => theme.colors.dusk};
   border: 1px solid ${({ theme }) => theme.colors.border2};
