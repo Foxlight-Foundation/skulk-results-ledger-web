@@ -114,6 +114,14 @@ export interface NodeInfo {
    * the fingerprint predates the field.
    */
   gttTotalBytes: number | null;
+  /**
+   * The capacity the hardware taxonomy tiers this node on: plain RAM for most
+   * nodes, RAM plus the VRAM carve for a unified-memory APU (real signal or
+   * trusted estimate). RENDER THIS, never `ramTotalBytes`, when showing a
+   * node's memory -- the raw figure is the post-carve OS slice and would
+   * contradict the node's hardware class (61.4 GB beside "AMD 128GB").
+   */
+  unifiedCapacityBytes: number | null;
   skulkVersion: string | null;
 }
 

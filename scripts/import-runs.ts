@@ -44,7 +44,7 @@ import type {
 } from '../src/data/schema.ts';
 import { LEDGER_SCHEMA_VERSION } from '../src/data/schema.ts';
 import { suiteCatalogEntry } from '../src/data/suite-catalog.ts';
-import { profileOf, UNKNOWN_HARDWARE } from './hardware-taxonomy.ts';
+import { profileOf, unifiedCapacityBytes, UNKNOWN_HARDWARE } from './hardware-taxonomy.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..');
@@ -305,7 +305,7 @@ function familyOf(modelId: string, nodes: NodeInfo[]): EngineFamily {
 
 // ---- per-run transform -----------------------------------------------------
 
-function nodesFrom(report: RawReport): NodeInfo[] {
+function nodesFrom(report: RawReport, tier: ProvenanceTier): NodeInfo[] {
   const raw = report.fingerprint?.cluster?.nodes ?? [];
   return raw.map((n) => ({
     nodeId: n.node_id,
@@ -315,6 +315,17 @@ function nodesFrom(report: RawReport): NodeInfo[] {
     acceleratorName: n.accelerator_name ?? null,
     vramTotalBytes: n.vram_total_bytes ?? null,
     gttTotalBytes: n.gtt_total_bytes ?? null,
+    // Baked with the same rule the taxonomy tiers on, so every displayed
+    // memory figure agrees with the node's hardware class.
+    unifiedCapacityBytes: unifiedCapacityBytes(
+      n.accelerator_vendor?.toLowerCase().trim() || null,
+      n.ram_total_bytes,
+      {
+        vramTotalBytes: n.vram_total_bytes,
+        gttTotalBytes: n.gtt_total_bytes,
+        trustApuFallback: tier === 'foxlight',
+      },
+    ),
     skulkVersion: n.skulk_version ?? null,
   }));
 }
@@ -338,7 +349,7 @@ function buildRunDetail(
   tier: ProvenanceTier = 'foxlight',
   submitter: string | null = null,
 ): RunDetail {
-  const nodes = nodesFrom(report);
+  const nodes = nodesFrom(report, tier);
   const fp = report.fingerprint;
   const results = report.results ?? [];
   const placementNodes = new Map<string, number>();

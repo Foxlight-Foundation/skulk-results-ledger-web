@@ -19,9 +19,10 @@ import type { HardwareProfile } from '../src/data/schema.ts';
 
 /**
  * Standard memory tiers in GB. Raw readings land near-but-not-on marketing
- * sizes (a 32GB Strix reports ~30GiB usable, a 64GB box ~61GiB), so nodes
- * snap to the nearest tier. Tiers double as an anonymity coarsener for the
- * future field-telemetry tier.
+ * sizes (an APU's unified capacity comes out at e.g. ~125GiB for a 128GB
+ * Strix after adding the carve back, and Apple nodes report binary GiB), so
+ * nodes snap to the nearest tier. Tiers double as an anonymity coarsener for
+ * the future field-telemetry tier.
  */
 const MEMORY_TIERS_GB = [8, 16, 24, 32, 48, 64, 96, 128, 192, 256, 512];
 
@@ -101,7 +102,7 @@ interface NodeMemorySignals {
  * AMD nodes fall through to the plain RAM reading rather than a doubled guess.
  * Apple is already full unified RAM with no carve; discrete GPUs never reach here.
  */
-function unifiedCapacityBytes(
+export function unifiedCapacityBytes(
   vendor: string | null,
   ramTotalBytes: number | null | undefined,
   mem: NodeMemorySignals,

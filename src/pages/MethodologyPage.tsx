@@ -101,9 +101,15 @@ export function MethodologyPage() {
 
       <H2>How hardware is classified</H2>
       <P>
-        Each run&apos;s fingerprint records raw facts per node (accelerator vendor, total memory).
-        At import those map to canonical classes: vendor plus the nearest standard memory tier, so
-        a node reporting 61GiB usable reads as AMD 64GB. A run&apos;s hardware is the multiset of
+        Each run&apos;s fingerprint records raw facts per node (accelerator vendor, memory, and on
+        GPU nodes the VRAM and GTT sizes). At import those map to canonical classes: vendor plus
+        the nearest standard memory tier of the node&apos;s unified capacity. On a unified-memory
+        APU (an AMD Strix) the OS-visible RAM is only the slice left after the BIOS carves a VRAM
+        region from the same physical memory, so the carve is added back before tiering -- a 128GB
+        box reporting 61GiB usable plus a 64GB carve reads as AMD 128GB. The carve is applied when
+        the node&apos;s GTT aperture shows the GPU addresses system RAM (any tier), or as a
+        fleet-calibrated estimate for older first-party fingerprints; an untrusted AMD node with
+        no such signal keeps its plain RAM reading. A run&apos;s hardware is the multiset of
         its node classes; a model&apos;s hardware is the classes of the nodes that actually served
         it where the run recorded placement (marked exact), or the whole-cluster shape otherwise
         (marked cluster). Runs that predate hardware fingerprints show as unknown hardware rather
