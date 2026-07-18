@@ -385,6 +385,8 @@ function buildRunDetail(
     const concurrencyPoints = concurrencyPointsOf(rs);
     const passCount = rs.filter((r) => r.passed).length;
     const failCount = rs.length - passCount;
+    const plainPassCount = plain.filter((r) => r.passed).length;
+    const plainFailCount = plain.length - plainPassCount;
     const issueCount = rs.reduce((n, r) => n + (r.issues?.length ?? 0), 0);
     const reps = new Set(rs.map((r) => r.repetition)).size;
     const { hardware, attribution } = modelHardware(modelId);
@@ -400,6 +402,8 @@ function buildRunDetail(
       hardware,
       hardwareAttribution: attribution,
       concurrencyPoints,
+      plainPassCount,
+      plainFailCount,
     });
   }
   models.sort((a, b) => a.modelId.localeCompare(b.modelId));
@@ -511,12 +515,11 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
     // Explorer run counts would count sweeps as decode runs).
     const isSweepOnly = (e: (typeof allEntries)[number]) =>
       (e.result.concurrencyPoints?.length ?? 0) > 0 &&
-      e.result.decodeTps.sampleCount + e.result.decodeTps.shortSampleCount === 0 &&
-      e.result.ttft.sampleCount === 0;
+      e.result.plainPassCount + e.result.plainFailCount === 0;
     const entries = allEntries.filter((e) => !isSweepOnly(e));
     const nodes = allEntries.at(-1)?.detail.nodes ?? [];
     const timeline: ModelTimePoint[] = entries.map(({ detail, result }) => {
-      const total = result.passCount + result.failCount;
+      const total = result.plainPassCount + result.plainFailCount;
       const credible =
         result.decodeTps.sampleCount >= LOW_SAMPLE_THRESHOLD &&
         !result.caveats.includes('short_output_dominant') &&
@@ -530,7 +533,7 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
         nodeCount: result.nodeCount,
         skulkVersion: detail.skulkVersion,
         cacheClass: detail.cacheClass,
-        passRate: total ? result.passCount / total : 0,
+        passRate: total ? result.plainPassCount / total : 0,
         caveats: result.caveats,
         credible,
         hardware: result.hardware,
@@ -553,8 +556,11 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
     });
     const hardwareCells: HardwareCell[] = [...byHardware.entries()].map(([label, cells]) => {
       const crediblePoints = cells.filter((c) => c.point.credible && c.point.decodeTpsMedian != null);
-      const cellResults = cells.reduce((n, c) => n + c.entry.result.passCount + c.entry.result.failCount, 0);
-      const cellPass = cells.reduce((n, c) => n + c.entry.result.passCount, 0);
+      const cellResults = cells.reduce(
+        (n, c) => n + c.entry.result.plainPassCount + c.entry.result.plainFailCount,
+        0,
+      );
+      const cellPass = cells.reduce((n, c) => n + c.entry.result.plainPassCount, 0);
       return {
         label,
         classes: cells[0].point.hardware.classes,
@@ -589,8 +595,11 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
     );
     const typical = median(credible.map((t) => t.decodeTpsMedian as number));
     const latestCredible = credible.at(-1);
-    const totalResults = entries.reduce((n, e) => n + e.result.passCount + e.result.failCount, 0);
-    const totalPass = entries.reduce((n, e) => n + e.result.passCount, 0);
+    const totalResults = entries.reduce(
+      (n, e) => n + e.result.plainPassCount + e.result.plainFailCount,
+      0,
+    );
+    const totalPass = entries.reduce((n, e) => n + e.result.plainPassCount, 0);
     const latest = entries.at(-1);
     const nodeCounts = [...new Set(entries.map((e) => e.result.nodeCount).filter((n) => n > 0))].sort(
       (a, b) => a - b,
@@ -624,8 +633,8 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
         hardwareLabel: t.hardware.label,
         hardwareClasses: t.hardware.classes,
         clusterAttributed: entries[i].result.hardwareAttribution === 'cluster',
-        passCount: entries[i].result.passCount,
-        failCount: entries[i].result.failCount,
+        passCount: entries[i].result.plainPassCount,
+        failCount: entries[i].result.plainFailCount,
         nodeCount: t.nodeCount,
       })),
       timeline,

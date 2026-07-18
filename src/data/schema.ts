@@ -197,6 +197,15 @@ export interface RunModelResult {
    * across simultaneous clients, not a decode rate). Empty for ordinary runs.
    */
   concurrencyPoints?: ConcurrencyPoint[];
+  /**
+   * Pass/fail over the PLAIN (non-sweep) results only. `passCount`/`failCount`
+   * keep counting every executed request -- honest for the run-detail view --
+   * but the model timeline/window/hardware rollups aggregate these instead, so
+   * a sweep's 100+ requests can never weight a model's decode-oriented pass
+   * rate (mixed runs included). Sweep success lives on the curve points.
+   */
+  plainPassCount: number;
+  plainFailCount: number;
 }
 
 /** Full per-run detail file (`public/data/runs/<runId>.json`). */
