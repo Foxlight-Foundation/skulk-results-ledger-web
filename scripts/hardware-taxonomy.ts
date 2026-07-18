@@ -140,6 +140,29 @@ export function classifyNode(
   return `${vendor}-${tier}gb`;
 }
 
+/**
+ * The memory figure a node should DISPLAY, consistent with its hardware
+ * class. Discrete-GPU nodes class by accelerator VRAM (host RAM says nothing
+ * about the GPU -- a rented A100 box can carry 512GB of system RAM), so a
+ * known chip returns its VRAM size and an unknown discrete chip returns null
+ * rather than a host-RAM figure that would contradict the class. Unified
+ * vendors return the tier their class carries.
+ */
+export function nodeMemoryGb(
+  acceleratorVendor: string | null | undefined,
+  ramTotalBytes: number | null | undefined,
+  acceleratorName?: string | null,
+  mem: NodeMemorySignals = {},
+): number | null {
+  const vendor = acceleratorVendor?.toLowerCase().trim() || null;
+  if (vendor && DISCRETE_GPU_VENDORS.has(vendor)) {
+    const normalized = acceleratorName?.toLowerCase().trim().replace(/\s+/g, ' ') || null;
+    const known = normalized ? KNOWN_DISCRETE_GPUS[normalized] : undefined;
+    return known ? known.vramGb : null;
+  }
+  return memoryTierGb(unifiedCapacityBytes(vendor, ramTotalBytes, mem));
+}
+
 const VENDOR_LABELS: Record<string, string> = {
   apple: 'Apple',
   amd: 'AMD',

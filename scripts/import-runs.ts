@@ -44,7 +44,7 @@ import type {
 } from '../src/data/schema.ts';
 import { LEDGER_SCHEMA_VERSION } from '../src/data/schema.ts';
 import { suiteCatalogEntry } from '../src/data/suite-catalog.ts';
-import { memoryTierGb, profileOf, unifiedCapacityBytes, UNKNOWN_HARDWARE } from './hardware-taxonomy.ts';
+import { nodeMemoryGb, profileOf, UNKNOWN_HARDWARE } from './hardware-taxonomy.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..');
@@ -315,16 +315,14 @@ function nodesFrom(report: RawReport, tier: ProvenanceTier): NodeInfo[] {
     acceleratorName: n.accelerator_name ?? null,
     vramTotalBytes: n.vram_total_bytes ?? null,
     gttTotalBytes: n.gtt_total_bytes ?? null,
-    // The same tier the node's hardware class carries, so every displayed
-    // memory figure agrees with it (a 128GB Strix reads 128 GB, not the
-    // post-carve OS slice).
-    memoryGb: memoryTierGb(
-      unifiedCapacityBytes(n.accelerator_vendor?.toLowerCase().trim() || null, n.ram_total_bytes, {
-        vramTotalBytes: n.vram_total_bytes,
-        gttTotalBytes: n.gtt_total_bytes,
-        trustApuFallback: tier === 'foxlight',
-      }),
-    ),
+    // The same size the node's hardware class carries (unified tier, or a
+    // known discrete chip's VRAM; null for unknown discrete chips), so the
+    // displayed figure can never contradict the class.
+    memoryGb: nodeMemoryGb(n.accelerator_vendor, n.ram_total_bytes, n.accelerator_name, {
+      vramTotalBytes: n.vram_total_bytes,
+      gttTotalBytes: n.gtt_total_bytes,
+      trustApuFallback: tier === 'foxlight',
+    }),
     skulkVersion: n.skulk_version ?? null,
   }));
 }
