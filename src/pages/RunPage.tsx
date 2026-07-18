@@ -207,8 +207,12 @@ export function RunPage() {
                 <Meta key={n.nodeId}>
                   <MetaLabel>{n.friendlyName ?? n.nodeId.slice(0, 10)}</MetaLabel>
                   <MetaValue title={finePrint}>
-                    {n.memoryGb != null ? `${n.memoryGb} GB` : formatBytes(n.ramTotalBytes)}
-                    {n.acceleratorVendor ? ` · ${n.acceleratorVendor}` : ''}
+                    {/* memoryGb is null only for an unknown discrete chip (host
+                        RAM is not accelerator memory -- showing it would
+                        mislabel a 512GB pod host) or when the fingerprint has
+                        no memory at all; either way, no size beats a wrong one. */}
+                    {n.memoryGb != null ? `${n.memoryGb} GB` : ''}
+                    {n.acceleratorVendor ? `${n.memoryGb != null ? ' · ' : ''}${n.acceleratorVendor}` : ''}
                     {n.skulkVersion ? ` · ${n.skulkVersion}` : ''}
                   </MetaValue>
                 </Meta>
