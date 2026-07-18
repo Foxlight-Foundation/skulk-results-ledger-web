@@ -15,17 +15,20 @@ import {
 import type { ConcurrencyCurve } from '../../data/schema';
 import { formatDate, formatTps } from '../../data/format';
 import {
+  BarsGlyph,
   ChartCard,
   ChartHeading,
   ChartHint,
   ChartTitle,
   ChartToggleButton,
   ChartToggleGroup,
+  HeadlineBlock,
   HeadlineLabel,
   HeadlineNote,
   HeadlineRow,
   HeadlineStat,
   HeadlineValue,
+  LineGlyph,
   TooltipShell,
   useChartPalette,
 } from './ChartFrame';
@@ -120,17 +123,28 @@ export function ConcurrencyChart({ curve }: { curve: ConcurrencyCurve }) {
             {curve.hardwareLabel} · {formatDate(curve.startedAt)}
           </ChartHint>
           <ChartToggleGroup role="group" aria-label="chart style">
-            <ChartToggleButton $active={mode === 'bars'} onClick={() => setMode('bars')}>
-              bars
+            <ChartToggleButton
+              $active={mode === 'bars'}
+              onClick={() => setMode('bars')}
+              aria-label="bar chart"
+              title="Bar chart"
+            >
+              <BarsGlyph />
             </ChartToggleButton>
-            <ChartToggleButton $active={mode === 'line'} onClick={() => setMode('line')}>
-              line
+            <ChartToggleButton
+              $active={mode === 'line'}
+              onClick={() => setMode('line')}
+              aria-label="line chart"
+              title="Line chart"
+            >
+              <LineGlyph />
             </ChartToggleButton>
           </ChartToggleGroup>
         </div>
       </ChartHeading>
 
-      <HeadlineRow>
+      <HeadlineBlock>
+        <HeadlineRow>
         {peak.aggregate != null && (
           <HeadlineStat>
             <HeadlineValue>{formatTps(peak.aggregate)} tok/s</HeadlineValue>
@@ -158,14 +172,15 @@ export function ConcurrencyChart({ curve }: { curve: ConcurrencyCurve }) {
             `${peak.perRequest != null ? formatTps(peak.perRequest) : '?'} tok/s.`
           : `Aggregate throughput stays roughly flat as clients are added, so concurrent requests ` +
             `share the engine serially -- each request's rate falls with every client added.`}
-      </HeadlineNote>
+        </HeadlineNote>
+      </HeadlineBlock>
 
       <ResponsiveContainer width="100%" height={300}>
         {mode === 'bars' ? (
           <BarChart data={series} margin={{ top: 12, right: 20, bottom: 8, left: 4 }} barCategoryGap="25%">
             <CartesianGrid stroke={palette.grid} vertical={false} />
             <XAxis dataKey="concurrency" type="category" {...axisProps} label={xLabel} />
-            <YAxis {...axisProps} label={yLabel} />
+            <YAxis width={60} {...axisProps} label={yLabel} />
             {tooltip}
             {legend}
             <Bar
@@ -195,7 +210,7 @@ export function ConcurrencyChart({ curve }: { curve: ConcurrencyCurve }) {
               {...axisProps}
               label={xLabel}
             />
-            <YAxis {...axisProps} label={yLabel} />
+            <YAxis width={60} {...axisProps} label={yLabel} />
             {tooltip}
             {legend}
             <Line
