@@ -176,18 +176,23 @@ function decodeOf(m: RawMetrics): number | null {
 }
 
 function decodeIsEstimated(m: RawMetrics): boolean {
-  // decodeOf returns a MEASURED decode rate only when it can subtract a real
-  // TTFT from a real wall window over a real output-token count. Every other
-  // branch (missing tokens, missing/zero TTFT, or a degenerate window) falls
-  // back to raw whole-request throughput, which folds in prompt/TTFT time and
-  // must be flagged as an estimate per the methodology page's promise that
-  // wall-throughput fallbacks are labeled.
+  // True only when decodeOf's returned value is RAW WALL throughput (which folds
+  // in prompt/TTFT time), so the caveat marks exactly what the methodology page
+  // promises. A measured decode window (tokens over wall minus a real TTFT) is
+  // NOT estimated, and neither is the native skulk_generation_tps rate used when
+  // there is no wall throughput at all -- only the wall-throughput branch is.
   const tokens = tokensOf(m);
   const wallTps = m.wall_tps;
   const ttft = m.ttft_s;
-  if (tokens == null || tokens <= 0 || wallTps == null || wallTps <= 0) return true;
-  if (ttft == null || ttft <= 0) return true;
-  return tokens / wallTps - ttft <= 0;
+  const hasWindow = tokens != null && tokens > 0 && wallTps != null && wallTps > 0;
+  if (hasWindow && ttft != null && ttft > 0) {
+    // Degenerate window (TTFT >= wall) falls back to raw wall throughput.
+    return tokens / wallTps - ttft <= 0;
+  }
+  // No measurable window: the value is raw wall throughput (an estimate) when
+  // wall_tps exists; otherwise it is the native decode rate or null, neither of
+  // which is a wall estimate.
+  return wallTps != null && wallTps > 0;
 }
 
 function aggregate(
