@@ -24,6 +24,8 @@ import type {
   CacheClass,
   ProvenanceTier,
   Caveat,
+  ConcurrencyCurve,
+  ConcurrencyPoint,
   EngineFamily,
   HardwareAttribution,
   HardwareCell,
@@ -42,7 +44,7 @@ import type {
 } from '../src/data/schema.ts';
 import { LEDGER_SCHEMA_VERSION } from '../src/data/schema.ts';
 import { suiteCatalogEntry } from '../src/data/suite-catalog.ts';
-import { profileOf, UNKNOWN_HARDWARE } from './hardware-taxonomy.ts';
+import { nodeMemoryGb, profileOf, UNKNOWN_HARDWARE } from './hardware-taxonomy.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO = resolve(HERE, '..');
@@ -66,6 +68,18 @@ interface RawMetrics {
   wall_tps?: number | null;
   skulk_generation_tps?: number | null;
   skulk_generation_tokens?: number | null;
+  // Concurrency-sweep fields (harness `concurrent` test kind). `concurrency`
+  // present marks the result as a sweep level, whose throughput is an AGGREGATE
+  // across simultaneous clients -- never a decode rate.
+  concurrency?: number | null;
+  aggregate_generation_tps?: number | null;
+  per_request_generation_tps_p50?: number | null;
+  per_request_generation_tps_p90?: number | null;
+  ttft_p50_s?: number | null;
+  ttft_p90_s?: number | null;
+  concurrent_total_requests?: number | null;
+  concurrent_succeeded?: number | null;
+  concurrent_failed?: number | null;
 }
 interface RawIssue {
   severity?: string;
@@ -149,6 +163,36 @@ function tokensOf(m: RawMetrics): number | null {
 function isShort(m: RawMetrics): boolean {
   const t = tokensOf(m);
   return t == null || t < SHORT_OUTPUT_TOKENS;
+}
+
+function isConcurrent(m: RawMetrics): boolean {
+  // A result from a concurrency sweep. Its skulk_generation_tps is the
+  // AGGREGATE across N simultaneous clients, so folding it into the decode
+  // aggregates would bake a median-of-aggregates-across-levels into the
+  // model's history as a fake decode rate (observed: a 1B GGUF showing a
+  // "credible" 678 tok/s decode that was really the c1..c64 aggregate median).
+  return m.concurrency != null;
+}
+
+function finiteOrNull(value: number | null | undefined): number | null {
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+function concurrencyPointsOf(results: RawResult[]): ConcurrencyPoint[] {
+  return results
+    .filter((r) => isConcurrent(r.metrics))
+    .map((r) => ({
+      concurrency: r.metrics.concurrency as number,
+      aggregateTps: finiteOrNull(r.metrics.aggregate_generation_tps),
+      perRequestTpsP50: finiteOrNull(r.metrics.per_request_generation_tps_p50),
+      perRequestTpsP90: finiteOrNull(r.metrics.per_request_generation_tps_p90),
+      ttftP50S: finiteOrNull(r.metrics.ttft_p50_s),
+      ttftP90S: finiteOrNull(r.metrics.ttft_p90_s),
+      totalRequests: finiteOrNull(r.metrics.concurrent_total_requests),
+      succeeded: finiteOrNull(r.metrics.concurrent_succeeded),
+      failed: finiteOrNull(r.metrics.concurrent_failed),
+    }))
+    .sort((a, b) => a.concurrency - b.concurrency);
 }
 
 function decodeOf(m: RawMetrics): number | null {
@@ -261,7 +305,7 @@ function familyOf(modelId: string, nodes: NodeInfo[]): EngineFamily {
 
 // ---- per-run transform -----------------------------------------------------
 
-function nodesFrom(report: RawReport): NodeInfo[] {
+function nodesFrom(report: RawReport, tier: ProvenanceTier): NodeInfo[] {
   const raw = report.fingerprint?.cluster?.nodes ?? [];
   return raw.map((n) => ({
     nodeId: n.node_id,
@@ -271,6 +315,14 @@ function nodesFrom(report: RawReport): NodeInfo[] {
     acceleratorName: n.accelerator_name ?? null,
     vramTotalBytes: n.vram_total_bytes ?? null,
     gttTotalBytes: n.gtt_total_bytes ?? null,
+    // The same size the node's hardware class carries (unified tier, or a
+    // known discrete chip's VRAM; null for unknown discrete chips), so the
+    // displayed figure can never contradict the class.
+    memoryGb: nodeMemoryGb(n.accelerator_vendor, n.ram_total_bytes, n.accelerator_name, {
+      vramTotalBytes: n.vram_total_bytes,
+      gttTotalBytes: n.gtt_total_bytes,
+      trustApuFallback: tier === 'foxlight',
+    }),
     skulkVersion: n.skulk_version ?? null,
   }));
 }
@@ -294,7 +346,7 @@ function buildRunDetail(
   tier: ProvenanceTier = 'foxlight',
   submitter: string | null = null,
 ): RunDetail {
-  const nodes = nodesFrom(report);
+  const nodes = nodesFrom(report, tier);
   const fp = report.fingerprint;
   const results = report.results ?? [];
   const placementNodes = new Map<string, number>();
@@ -332,12 +384,26 @@ function buildRunDetail(
 
   const models: RunModelResult[] = [];
   for (const [modelId, rs] of byModel) {
-    const decode = aggregate('decode_tps', 'tok/s', rs, decodeOf, true);
-    const ttft = aggregate('ttft_s', 's', rs, (m) => m.ttft_s ?? null, false);
+    // Concurrency-sweep results are surfaced as their own curve; the plain
+    // decode/ttft aggregates must never include them (aggregate throughput
+    // across N clients is not a decode rate).
+    const plain = rs.filter((r) => !isConcurrent(r.metrics));
+    const decode = aggregate('decode_tps', 'tok/s', plain, decodeOf, true);
+    const ttft = aggregate('ttft_s', 's', plain, (m) => m.ttft_s ?? null, false);
+    const concurrencyPoints = concurrencyPointsOf(rs);
     const passCount = rs.filter((r) => r.passed).length;
     const failCount = rs.length - passCount;
+    const plainPassCount = plain.filter((r) => r.passed).length;
+    const plainFailCount = plain.length - plainPassCount;
     const issueCount = rs.reduce((n, r) => n + (r.issues?.length ?? 0), 0);
-    const reps = new Set(rs.map((r) => r.repetition)).size;
+    // Caveats are trust markers on the DECODE measurement (the aggregates and
+    // timeline chips they render beside are plain-only), so their inputs must
+    // come from plain rows too: a sweep-level failure/issue must not stamp
+    // has_failures/issue_marked onto a decode point whose pass rate excludes
+    // it, and sweep reps must not mask single_rep on a lone plain sample.
+    // Sweep failures stay visible in run-detail counts and curve points.
+    const plainIssueCount = plain.reduce((n, r) => n + (r.issues?.length ?? 0), 0);
+    const plainReps = new Set(plain.map((r) => r.repetition)).size;
     const { hardware, attribution } = modelHardware(modelId);
     models.push({
       modelId,
@@ -347,9 +413,12 @@ function buildRunDetail(
       nodeCount: placementNodes.get(modelId) ?? 0,
       decodeTps: decode,
       ttft,
-      caveats: modelCaveats(decode, failCount, issueCount, reps),
+      caveats: modelCaveats(decode, plainFailCount, plainIssueCount, plainReps),
       hardware,
       hardwareAttribution: attribution,
+      concurrencyPoints,
+      plainPassCount,
+      plainFailCount,
     });
   }
   models.sort((a, b) => a.modelId.localeCompare(b.modelId));
@@ -365,7 +434,14 @@ function buildRunDetail(
   // Flag whenever a result carries a decode value that came from the raw
   // wall-throughput fallback rather than a measured decode window -- not only
   // the no-data case. Keeps the caveat honest with the methodology page.
-  if (results.some((r) => decodeOf(r.metrics) != null && decodeIsEstimated(r.metrics))) {
+  if (
+    results.some(
+      (r) =>
+        !isConcurrent(r.metrics) &&
+        decodeOf(r.metrics) != null &&
+        decodeIsEstimated(r.metrics),
+    )
+  ) {
     runCaveats.push('decode_tps_estimated');
   }
 
@@ -445,11 +521,24 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
   }
 
   const histories: ModelHistory[] = [];
-  for (const [modelId, entries] of byModel) {
-    entries.sort((a, b) => (a.detail.startedAt ?? '').localeCompare(b.detail.startedAt ?? ''));
-    const nodes = entries.at(-1)?.detail.nodes ?? [];
+  for (const [modelId, allEntries] of byModel) {
+    allEntries.sort((a, b) => (a.detail.startedAt ?? '').localeCompare(b.detail.startedAt ?? ''));
+    // A sweep-only entry carries concurrency points and no plain samples at
+    // all. It feeds the concurrency curves ONLY: letting it into the timeline
+    // and run/pass rollups would re-pollute exactly what the sweep exclusion
+    // removed (a 271-request sweep would dominate the model's pass rate, and
+    // Explorer run counts would count sweeps as decode runs).
+    const isSweepOnly = (e: (typeof allEntries)[number]) =>
+      (e.result.concurrencyPoints?.length ?? 0) > 0 &&
+      e.result.plainPassCount + e.result.plainFailCount === 0;
+    const entries = allEntries.filter((e) => !isSweepOnly(e));
+    // Family's homogeneous-vendor fallback must read the nodes of the latest
+    // DECODE entry (what the Explorer row's history describes), not a newer
+    // sweep-only run that may have landed on different hardware; sweep-only
+    // nodes are only a last resort when a model has nothing but sweeps.
+    const nodes = (entries.at(-1) ?? allEntries.at(-1))?.detail.nodes ?? [];
     const timeline: ModelTimePoint[] = entries.map(({ detail, result }) => {
-      const total = result.passCount + result.failCount;
+      const total = result.plainPassCount + result.plainFailCount;
       const credible =
         result.decodeTps.sampleCount >= LOW_SAMPLE_THRESHOLD &&
         !result.caveats.includes('short_output_dominant') &&
@@ -463,7 +552,7 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
         nodeCount: result.nodeCount,
         skulkVersion: detail.skulkVersion,
         cacheClass: detail.cacheClass,
-        passRate: total ? result.passCount / total : 0,
+        passRate: total ? result.plainPassCount / total : 0,
         caveats: result.caveats,
         credible,
         hardware: result.hardware,
@@ -486,8 +575,11 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
     });
     const hardwareCells: HardwareCell[] = [...byHardware.entries()].map(([label, cells]) => {
       const crediblePoints = cells.filter((c) => c.point.credible && c.point.decodeTpsMedian != null);
-      const cellResults = cells.reduce((n, c) => n + c.entry.result.passCount + c.entry.result.failCount, 0);
-      const cellPass = cells.reduce((n, c) => n + c.entry.result.passCount, 0);
+      const cellResults = cells.reduce(
+        (n, c) => n + c.entry.result.plainPassCount + c.entry.result.plainFailCount,
+        0,
+      );
+      const cellPass = cells.reduce((n, c) => n + c.entry.result.plainPassCount, 0);
       return {
         label,
         classes: cells[0].point.hardware.classes,
@@ -501,6 +593,19 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
     });
     hardwareCells.sort((a, b) => b.runCount - a.runCount);
 
+    // Concurrency sweeps: one curve per run that carried them, sorted by run
+    // start (the site shows the latest foxlight curve per hardware label).
+    const concurrencyCurves: ConcurrencyCurve[] = allEntries
+      .filter((e) => (e.result.concurrencyPoints?.length ?? 0) > 0)
+      .map((e) => ({
+        runId: e.detail.runId,
+        startedAt: e.detail.startedAt,
+        hardwareLabel: e.result.hardware.label,
+        hardwareClasses: e.result.hardware.classes,
+        tier: e.detail.tier,
+        points: e.result.concurrencyPoints as ConcurrencyPoint[],
+      }));
+
     // Headline numbers rest on credible FOXLIGHT points only: tiers never
     // blend, and a single-rep wall spike can never set the record. Community
     // points stay in the timeline, badged.
@@ -509,8 +614,11 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
     );
     const typical = median(credible.map((t) => t.decodeTpsMedian as number));
     const latestCredible = credible.at(-1);
-    const totalResults = entries.reduce((n, e) => n + e.result.passCount + e.result.failCount, 0);
-    const totalPass = entries.reduce((n, e) => n + e.result.passCount, 0);
+    const totalResults = entries.reduce(
+      (n, e) => n + e.result.plainPassCount + e.result.plainFailCount,
+      0,
+    );
+    const totalPass = entries.reduce((n, e) => n + e.result.plainPassCount, 0);
     const latest = entries.at(-1);
     const nodeCounts = [...new Set(entries.map((e) => e.result.nodeCount).filter((n) => n > 0))].sort(
       (a, b) => a - b,
@@ -544,11 +652,12 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
         hardwareLabel: t.hardware.label,
         hardwareClasses: t.hardware.classes,
         clusterAttributed: entries[i].result.hardwareAttribution === 'cluster',
-        passCount: entries[i].result.passCount,
-        failCount: entries[i].result.failCount,
+        passCount: entries[i].result.plainPassCount,
+        failCount: entries[i].result.plainFailCount,
         nodeCount: t.nodeCount,
       })),
       timeline,
+      concurrencyCurves,
     });
   }
   histories.sort((a, b) => (b.decodeTpsTypical ?? -1) - (a.decodeTpsTypical ?? -1));
@@ -600,7 +709,10 @@ function buildSuites(details: RunDetail[]): SuiteRollup[] {
 }
 
 function toRollup(h: ModelHistory): ModelRollup {
-  const { timeline: _t, ...rollup } = h;
+  // Strip the heavy per-model arrays: the Explorer/Hardware views never read
+  // them, and serializing every sweep's point arrays into index.json would
+  // bloat the initial payload (the Model page fetches the full history).
+  const { timeline: _t, concurrencyCurves: _c, ...rollup } = h;
   return rollup;
 }
 

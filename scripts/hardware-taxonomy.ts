@@ -19,9 +19,10 @@ import type { HardwareProfile } from '../src/data/schema.ts';
 
 /**
  * Standard memory tiers in GB. Raw readings land near-but-not-on marketing
- * sizes (a 32GB Strix reports ~30GiB usable, a 64GB box ~61GiB), so nodes
- * snap to the nearest tier. Tiers double as an anonymity coarsener for the
- * future field-telemetry tier.
+ * sizes (an APU's unified capacity comes out at e.g. ~125GiB for a 128GB
+ * Strix after adding the carve back, and Apple nodes report binary GiB), so
+ * nodes snap to the nearest tier. Tiers double as an anonymity coarsener for
+ * the future field-telemetry tier.
  */
 const MEMORY_TIERS_GB = [8, 16, 24, 32, 48, 64, 96, 128, 192, 256, 512];
 
@@ -101,7 +102,7 @@ interface NodeMemorySignals {
  * AMD nodes fall through to the plain RAM reading rather than a doubled guess.
  * Apple is already full unified RAM with no carve; discrete GPUs never reach here.
  */
-function unifiedCapacityBytes(
+export function unifiedCapacityBytes(
   vendor: string | null,
   ramTotalBytes: number | null | undefined,
   mem: NodeMemorySignals,
@@ -137,6 +138,29 @@ export function classifyNode(
   if (!vendor) return `unknown-${tier}gb`;
   if (tier == null) return vendor;
   return `${vendor}-${tier}gb`;
+}
+
+/**
+ * The memory figure a node should DISPLAY, consistent with its hardware
+ * class. Discrete-GPU nodes class by accelerator VRAM (host RAM says nothing
+ * about the GPU -- a rented A100 box can carry 512GB of system RAM), so a
+ * known chip returns its VRAM size and an unknown discrete chip returns null
+ * rather than a host-RAM figure that would contradict the class. Unified
+ * vendors return the tier their class carries.
+ */
+export function nodeMemoryGb(
+  acceleratorVendor: string | null | undefined,
+  ramTotalBytes: number | null | undefined,
+  acceleratorName?: string | null,
+  mem: NodeMemorySignals = {},
+): number | null {
+  const vendor = acceleratorVendor?.toLowerCase().trim() || null;
+  if (vendor && DISCRETE_GPU_VENDORS.has(vendor)) {
+    const normalized = acceleratorName?.toLowerCase().trim().replace(/\s+/g, ' ') || null;
+    const known = normalized ? KNOWN_DISCRETE_GPUS[normalized] : undefined;
+    return known ? known.vramGb : null;
+  }
+  return memoryTierGb(unifiedCapacityBytes(vendor, ramTotalBytes, mem));
 }
 
 const VENDOR_LABELS: Record<string, string> = {

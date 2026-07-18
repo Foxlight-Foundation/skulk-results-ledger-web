@@ -190,16 +190,34 @@ export function RunPage() {
         <>
           <Section>Cluster</Section>
           <Grid $min="200px">
-            {data.nodes.map((n) => (
-              <Meta key={n.nodeId}>
-                <MetaLabel>{n.friendlyName ?? n.nodeId.slice(0, 10)}</MetaLabel>
-                <MetaValue>
-                  {formatBytes(n.ramTotalBytes)}
-                  {n.acceleratorVendor ? ` · ${n.acceleratorVendor}` : ''}
-                  {n.skulkVersion ? ` · ${n.skulkVersion}` : ''}
-                </MetaValue>
-              </Meta>
-            ))}
+            {data.nodes.map((n) => {
+              // Show the node's nominal memory (the size its hardware class
+              // carries -- a 128GB Strix reads 128 GB), never the post-carve
+              // OS slice. The BIOS-split arithmetic is fine print on hover.
+              const carved =
+                n.memoryGb != null &&
+                n.ramTotalBytes != null &&
+                n.memoryGb * 1024 ** 3 > n.ramTotalBytes * 1.1;
+              const finePrint = carved
+                ? n.vramTotalBytes != null
+                  ? `unified memory: ${formatBytes(n.ramTotalBytes)} OS-visible + ${formatBytes(n.vramTotalBytes)} VRAM carve`
+                  : `unified memory: ${formatBytes(n.ramTotalBytes)} OS-visible after the BIOS VRAM carve`
+                : undefined;
+              return (
+                <Meta key={n.nodeId}>
+                  <MetaLabel>{n.friendlyName ?? n.nodeId.slice(0, 10)}</MetaLabel>
+                  <MetaValue title={finePrint}>
+                    {/* memoryGb is null only for an unknown discrete chip (host
+                        RAM is not accelerator memory -- showing it would
+                        mislabel a 512GB pod host) or when the fingerprint has
+                        no memory at all; either way, no size beats a wrong one. */}
+                    {n.memoryGb != null ? `${n.memoryGb} GB` : ''}
+                    {n.acceleratorVendor ? `${n.memoryGb != null ? ' · ' : ''}${n.acceleratorVendor}` : ''}
+                    {n.skulkVersion ? ` · ${n.skulkVersion}` : ''}
+                  </MetaValue>
+                </Meta>
+              );
+            })}
           </Grid>
         </>
       )}

@@ -8,7 +8,7 @@
  * it is declared here; if the site reads a field, it is declared here.
  */
 
-export const LEDGER_SCHEMA_VERSION = '1.4';
+export const LEDGER_SCHEMA_VERSION = '1.5';
 
 /**
  * Provenance tier (the open-ledger's load-bearing concept): `foxlight` =
@@ -114,6 +114,14 @@ export interface NodeInfo {
    * the fingerprint predates the field.
    */
   gttTotalBytes: number | null;
+  /**
+   * The node's nominal memory in GB -- the taxonomy tier its hardware class
+   * carries (a 128GB Strix reads 128, not the 61.4GiB post-carve OS slice or
+   * a 122.9 summed estimate). RENDER THIS when showing a node's memory; the
+   * OS-slice/carve arithmetic is fine print for a tooltip at most, because a
+   * reader cares what the node IS, not how the BIOS split it.
+   */
+  memoryGb: number | null;
   skulkVersion: string | null;
 }
 
@@ -145,6 +153,39 @@ export interface RunSummary {
   submitter: string | null;
 }
 
+/**
+ * One level of a throughput-vs-concurrency sweep: N simultaneous clients
+ * against one model instance. Aggregate rises with batching while per-request
+ * falls; the pair is the batching story, and neither is a plain decode rate,
+ * so these points live OUTSIDE the decode aggregates/timeline (a median of
+ * aggregates across levels is physically meaningless).
+ */
+export interface ConcurrencyPoint {
+  /** Simultaneous client count for this level (1, 4, 8, ...). */
+  concurrency: number;
+  /** Total generation throughput across all concurrent requests, tok/s. */
+  aggregateTps: number | null;
+  /** Median single-request decode rate at this level, tok/s. */
+  perRequestTpsP50: number | null;
+  perRequestTpsP90: number | null;
+  ttftP50S: number | null;
+  ttftP90S: number | null;
+  totalRequests: number | null;
+  succeeded: number | null;
+  failed: number | null;
+}
+
+/** One run's concurrency sweep for a model, with the hardware that served it. */
+export interface ConcurrencyCurve {
+  runId: string;
+  startedAt: string | null;
+  hardwareLabel: string;
+  hardwareClasses: string[];
+  tier: ProvenanceTier;
+  /** Sweep points sorted by ascending concurrency. */
+  points: ConcurrencyPoint[];
+}
+
 /** One model's result within a single run (for the run-detail view). */
 export interface RunModelResult {
   modelId: string;
@@ -158,6 +199,21 @@ export interface RunModelResult {
   /** Hardware that served this model (exact when attribution is `placement`). */
   hardware: HardwareProfile;
   hardwareAttribution: HardwareAttribution;
+  /**
+   * Concurrency-sweep points from this run's `concurrent`-kind results, which
+   * are EXCLUDED from `decodeTps`/`ttft` (their throughput is an aggregate
+   * across simultaneous clients, not a decode rate). Empty for ordinary runs.
+   */
+  concurrencyPoints?: ConcurrencyPoint[];
+  /**
+   * Pass/fail over the PLAIN (non-sweep) results only. `passCount`/`failCount`
+   * keep counting every executed request -- honest for the run-detail view --
+   * but the model timeline/window/hardware rollups aggregate these instead, so
+   * a sweep's 100+ requests can never weight a model's decode-oriented pass
+   * rate (mixed runs included). Sweep success lives on the curve points.
+   */
+  plainPassCount: number;
+  plainFailCount: number;
 }
 
 /** Full per-run detail file (`public/data/runs/<runId>.json`). */
@@ -279,6 +335,13 @@ export interface ModelRollup {
 /** Full per-model history file (`public/data/models/<slug>.json`). */
 export interface ModelHistory extends ModelRollup {
   timeline: ModelTimePoint[];
+  /**
+   * Throughput-vs-concurrency sweeps recorded for this model, one curve per
+   * run that contained `concurrent`-kind results, sorted by run start. The
+   * site renders the latest foxlight curve per hardware label; older curves
+   * stay for history. Empty when the model has never run a concurrency sweep.
+   */
+  concurrencyCurves: ConcurrencyCurve[];
 }
 
 /** Rollup for one test suite (test set). */
