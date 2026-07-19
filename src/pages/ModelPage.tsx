@@ -198,9 +198,20 @@ export function ModelPage() {
       {timeline.length === 0 ? (
         <EmptyState label="No runs for this model in the selected period. Widen the window, or select All." />
       ) : (
-        <>
-          <TrendChart timeline={timeline} />
+        <TrendChart timeline={timeline} />
+      )}
 
+      {concurrencyCurves.length > 0 && (
+        <>
+          <Section>Concurrency</Section>
+          {concurrencyCurves.map((curve) => (
+            <ConcurrencyChart key={curve.runId + curve.hardwareLabel} curve={curve} />
+          ))}
+        </>
+      )}
+
+      {timeline.length > 0 && (
+        <>
           <Section>Every run</Section>
           <SortableTable
             columns={columns}
@@ -210,15 +221,6 @@ export function ModelPage() {
             initialSortKey="date"
             initialSortDir="desc"
           />
-        </>
-      )}
-
-      {concurrencyCurves.length > 0 && (
-        <>
-          <Section>Concurrency</Section>
-          {concurrencyCurves.map((curve) => (
-            <ConcurrencyChart key={curve.runId + curve.hardwareLabel} curve={curve} />
-          ))}
         </>
       )}
     </Page>
