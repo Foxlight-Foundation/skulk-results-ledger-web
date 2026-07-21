@@ -96,6 +96,7 @@ ledger schema version is independent of the harness report schema.
 ## Checks
 
 ```bash
+npm test            # focused importer and taxonomy regressions
 npm run typecheck   # tsc -b
 npm run lint        # eslint
 npm run build       # tsc + vite build

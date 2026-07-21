@@ -4,8 +4,7 @@
  * comparable benchmark contexts and must not feed dashboard data.
  */
 export function hasFullyKnownHardware(classes: readonly string[]): boolean {
-  return (
-    classes.length > 0 &&
-    classes.every((hardwareClass) => !hardwareClass.startsWith('unknown'))
-  );
+  const completeHardwareClass =
+    /^(?!unknown(?:-|$))[a-z][a-z0-9]*(?:-[a-z0-9]+)?-\d+gb$/;
+  return classes.length > 0 && classes.every((hardwareClass) => completeHardwareClass.test(hardwareClass));
 }
