@@ -9,6 +9,7 @@ import { SortableTable, type Column } from '../components/SortableTable';
 import { EmptyState, ErrorState, LoadingState } from '../components/States';
 import type { ModelTimePoint } from '../data/schema';
 import { formatDate, formatSeconds, formatTps } from '../data/format';
+import { hasFullyKnownHardware } from '../data/hardware';
 import { useModelHistory } from '../data/useLedger';
 import { useWindow } from '../data/useWindow';
 import { isWithinWindow, windowRollup } from '../data/window';
@@ -41,6 +42,11 @@ const Section = styled.h2`
   margin: ${({ theme }) => theme.spacing.xl} 0 ${({ theme }) => theme.spacing.md};
 `;
 
+const ConcurrencyCharts = styled.div`
+  display: grid;
+  gap: ${({ theme }) => theme.spacing.lg};
+`;
+
 export function ModelPage() {
   const { slug } = useParams();
   const { data, error, loading } = useModelHistory(slug);
@@ -54,7 +60,9 @@ export function ModelPage() {
   // Scope the model's headline, hardware cells, and history to the selected
   // period. Everything below reflects only runs in the window.
   const w = windowRollup(data, window, now);
-  const timeline = data.timeline.filter((t) => isWithinWindow(t.startedAt, window, now));
+  const timeline = data.timeline.filter(
+    (t) => hasFullyKnownHardware(t.hardware.classes) && isWithinWindow(t.startedAt, window, now),
+  );
   // Latest foxlight concurrency sweep per hardware label, respecting the
   // selected time window; curves are already sorted by run start, so the last
   // per label wins. Community curves stay out of this headline view (tiers
@@ -65,6 +73,7 @@ export function ModelPage() {
         .filter(
           (c) =>
             c.tier === 'foxlight' &&
+            hasFullyKnownHardware(c.hardwareClasses) &&
             isWithinWindow(c.startedAt, window, now) &&
             // Only curves the chart can actually draw compete for the
             // latest-per-hardware slot: a newer sweep whose levels all failed
@@ -153,7 +162,7 @@ export function ModelPage() {
             <Chip>{w.nodeCountsObserved.join('/')}-node</Chip>
           )}
           {w.hardwareCells
-            .filter((c) => c.classes.some((x) => x !== 'unknown'))
+            .filter((c) => hasFullyKnownHardware(c.classes))
             .map((c) => (
               <Chip
                 key={c.label}
@@ -204,9 +213,11 @@ export function ModelPage() {
       {concurrencyCurves.length > 0 && (
         <>
           <Section>Concurrency</Section>
-          {concurrencyCurves.map((curve) => (
-            <ConcurrencyChart key={curve.runId + curve.hardwareLabel} curve={curve} />
-          ))}
+          <ConcurrencyCharts>
+            {concurrencyCurves.map((curve) => (
+              <ConcurrencyChart key={curve.runId + curve.hardwareLabel} curve={curve} />
+            ))}
+          </ConcurrencyCharts>
         </>
       )}
 

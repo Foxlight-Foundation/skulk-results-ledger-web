@@ -31,7 +31,7 @@ export interface HardwareProfile {
   label: string;
   nodeCount: number;
   homogeneous: boolean;
-  /** False when the run's fingerprint carries no classifiable node data (pre-fingerprint seed runs). */
+  /** False when any node in the profile lacks classifiable accelerator hardware. */
   known: boolean;
 }
 
