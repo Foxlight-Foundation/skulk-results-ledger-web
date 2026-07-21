@@ -64,6 +64,13 @@ export function MethodologyPage() {
         median and counted separately, so they can never set a record.
       </P>
       <P>
+        A physically plausible measured decode rate that misses only that per-run sample floor is
+        shown as <strong>indicative</strong> when no credible headline exists. Indicative values are
+        never blended into the credible median. Short-output-dominated and implausible points remain
+        excluded, and time to first token is evaluated independently so a valid latency measurement
+        is not hidden merely because the same run lacks credible decode throughput.
+      </P>
+      <P>
         When Skulk reports a native decode rate we use it. When it does not (some engines only expose
         a wall-clock figure that folds in prompt time) we fall back to wall throughput and mark the
         number as an estimate. We never silently mix the two.
@@ -72,6 +79,15 @@ export function MethodologyPage() {
         We also apply a physical-plausibility ceiling. Implausible tokens-per-second, invalid text
         generation, etc. are excluded from headline numbers and are shown dimmed in the history
         rather than deleted.
+      </P>
+
+      <H2>Metrics follow the workload</H2>
+      <P>
+        The Explorer&apos;s throughput table contains workloads that generate text: chat, code,
+        tools, and vision-to-text. Speech, audio, and embedding models are listed separately without
+        text-only tokens-per-second or time-to-first-token columns. Their useful performance units
+        differ, so an absent text metric is labeled not applicable rather than presented as a failed
+        measurement.
       </P>
 
       <H2>Why comparisons carry warnings</H2>

@@ -8,7 +8,7 @@
  * it is declared here; if the site reads a field, it is declared here.
  */
 
-export const LEDGER_SCHEMA_VERSION = '1.5';
+export const LEDGER_SCHEMA_VERSION = '1.6';
 
 /**
  * Provenance tier (the open-ledger's load-bearing concept): `foxlight` =
@@ -51,6 +51,10 @@ export interface HardwareCell {
   credibleRunCount: number;
   /** Median across this model's credible per-run medians ON this hardware. */
   decodeTpsTypical: number | null;
+  /** Median across physically plausible low-sample per-run medians on this hardware. */
+  decodeTpsIndicative: number | null;
+  /** Low-sample runs contributing to `decodeTpsIndicative`. */
+  indicativeRunCount: number;
   passRate: number;
   lastRunAt: string | null;
   /**
@@ -63,6 +67,9 @@ export interface HardwareCell {
 
 /** Coarse engine family, derived from placement + fingerprint, for grouping. */
 export type EngineFamily = 'mlx' | 'llama_cpp' | 'llama_server' | 'unknown';
+
+/** The kind of workload a model result exercised, derived from its test suite. */
+export type WorkloadKind = 'text' | 'vision' | 'speech' | 'embeddings';
 
 /** Cache warmth as classified by the harness (never asserts a cold benchmark). */
 export type CacheClass = 'unknown' | 'cold' | 'warm' | 'mixed';
@@ -246,6 +253,8 @@ export interface ModelTimePoint {
   cacheClass: CacheClass;
   passRate: number;
   caveats: Caveat[];
+  /** Workload exercised by this run, derived from its suite. */
+  workload: WorkloadKind;
   /**
    * A point is credible when it rests on enough real samples (multi-rep) and
    * is not dominated by short outputs. Headline numbers are computed from
@@ -253,6 +262,12 @@ export interface ModelTimePoint {
    * a record. Non-credible points are still plotted (dimmed) for honesty.
    */
   credible: boolean;
+  /**
+   * A physically plausible measured decode point that missed only the strict
+   * credibility bar. Short-output-dominated and implausible measurements are
+   * never eligible for this explicitly labeled fallback.
+   */
+  indicative: boolean;
   /** Hardware that served this model in this run. */
   hardware: HardwareProfile;
   tier: ProvenanceTier;
@@ -271,6 +286,8 @@ export interface WindowPoint {
   decodeTpsMedian: number | null;
   ttftMedian: number | null;
   credible: boolean;
+  indicative: boolean;
+  workload: WorkloadKind;
   tier: ProvenanceTier;
   /** Hardware label for per-hardware cell grouping (matches HardwareProfile.label). */
   hardwareLabel: string;
@@ -295,6 +312,8 @@ export interface ModelRollup {
   slug: string;
   displayName: string;
   family: EngineFamily;
+  /** Distinct workload kinds observed for this model. */
+  workloads: WorkloadKind[];
   runCount: number;
   totalResults: number;
   passRate: number;
@@ -305,12 +324,21 @@ export interface ModelRollup {
    * no-cherry-picking principle). Null when the model has no credible run.
    */
   decodeTpsTypical: number | null;
+  /**
+   * Median across physically plausible low-sample per-run medians. Rendered
+   * only as an explicitly labeled fallback when no credible headline exists.
+   */
+  decodeTpsIndicative: number | null;
   /** Most-recent CREDIBLE run's median decode tok/s. */
   decodeTpsLatest: number | null;
-  /** TTFT median from the most-recent credible run. */
+  /** Most-recent physically plausible low-sample run's median decode tok/s. */
+  decodeTpsLatestIndicative: number | null;
+  /** TTFT median from the most-recent measured run, independent of TPS credibility. */
   ttftLatestMedian: number | null;
   /** How many of this model's runs cleared the credibility bar. */
   credibleRunCount: number;
+  /** How many physically plausible runs missed only the strict credibility bar. */
+  indicativeRunCount: number;
   nodeCountsObserved: number[];
   lastRunAt: string | null;
   caveats: Caveat[];

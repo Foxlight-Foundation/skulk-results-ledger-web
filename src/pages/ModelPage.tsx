@@ -12,6 +12,12 @@ import { formatDate, formatSeconds, formatTps } from '../data/format';
 import { hasFullyKnownHardware } from '../data/hardware';
 import { useModelHistory } from '../data/useLedger';
 import { useWindow } from '../data/useWindow';
+import {
+  hasTextGenerationWorkload,
+  NON_TEXT_WORKLOADS,
+  TEXT_GENERATION_WORKLOADS,
+  workloadLabel,
+} from '../data/workload';
 import { isWithinWindow, windowRollup } from '../data/window';
 
 const Header = styled.header`
@@ -47,6 +53,11 @@ const ConcurrencyCharts = styled.div`
   gap: ${({ theme }) => theme.spacing.lg};
 `;
 
+const WorkloadNote = styled(Panel)`
+  color: ${({ theme }) => theme.colors.text2};
+  padding: ${({ theme }) => theme.spacing.md};
+`;
+
 export function ModelPage() {
   const { slug } = useParams();
   const { data, error, loading } = useModelHistory(slug);
@@ -57,11 +68,17 @@ export function ModelPage() {
   if (error) return <ErrorState error={error} />;
   if (!data) return <ErrorState error="Model not found." />;
 
+  const isTextGeneration = hasTextGenerationWorkload(data.workloads);
+  const metricWorkloads = isTextGeneration ? TEXT_GENERATION_WORKLOADS : NON_TEXT_WORKLOADS;
   // Scope the model's headline, hardware cells, and history to the selected
-  // period. Everything below reflects only runs in the window.
-  const w = windowRollup(data, window, now);
+  // period and task-appropriate workload. Speech data can never enter a text
+  // metric merely because the same model identifier appears in both contexts.
+  const w = windowRollup(data, window, now, undefined, metricWorkloads);
   const timeline = data.timeline.filter(
-    (t) => hasFullyKnownHardware(t.hardware.classes) && isWithinWindow(t.startedAt, window, now),
+    (t) =>
+      hasFullyKnownHardware(t.hardware.classes) &&
+      isWithinWindow(t.startedAt, window, now) &&
+      metricWorkloads.includes(t.workload),
   );
   // Latest foxlight concurrency sweep per hardware label, respecting the
   // selected time window; curves are already sorted by run start, so the last
@@ -98,7 +115,9 @@ export function ModelPage() {
       align: 'right',
       sortValue: (t) => t.decodeTpsMedian ?? -1,
       render: (t) => (
-        <span style={{ opacity: t.credible ? 1 : 0.55 }}>{formatTps(t.decodeTpsMedian)}</span>
+        <span style={{ opacity: t.credible ? 1 : 0.55 }}>
+          {t.decodeTpsMedian == null ? 'N/A' : formatTps(t.decodeTpsMedian)}
+        </span>
       ),
     },
     {
@@ -106,7 +125,7 @@ export function ModelPage() {
       header: 'TTFT',
       align: 'right',
       sortValue: (t) => t.ttftMedian ?? Number.MAX_SAFE_INTEGER,
-      render: (t) => formatSeconds(t.ttftMedian),
+      render: (t) => (t.ttftMedian == null ? 'N/A' : formatSeconds(t.ttftMedian)),
     },
     {
       key: 'n',
@@ -150,6 +169,24 @@ export function ModelPage() {
     },
   ];
 
+  const otherColumns: Column<ModelTimePoint>[] = columns.filter(
+    (column) => column.key !== 'decode' && column.key !== 'ttft' && column.key !== 'n',
+  );
+  const headlineTps = w.decodeTpsTypical ?? w.decodeTpsIndicative;
+  const latestTps = w.decodeTpsLatest ?? w.decodeTpsLatestIndicative;
+  const headlineConfidence =
+    w.decodeTpsTypical != null
+      ? 'credible'
+      : w.decodeTpsIndicative != null
+        ? 'indicative'
+        : 'unavailable';
+  const latestConfidence =
+    w.decodeTpsLatest != null
+      ? 'credible'
+      : w.decodeTpsLatestIndicative != null
+        ? 'indicative'
+        : 'unavailable';
+
   return (
     <Page>
       <Header>
@@ -157,6 +194,9 @@ export function ModelPage() {
         <Name>{data.displayName}</Name>
         <Row $gap="8px" $wrap style={{ marginTop: 12 }}>
           <FamilyBadge family={data.family} />
+          <Chip $tone="amber">
+            {isTextGeneration ? 'Text generation' : workloadLabel(data.workloads)}
+          </Chip>
           <PassRateChip passRate={w.passRate} />
           {w.nodeCountsObserved.length > 0 && (
             <Chip>{w.nodeCountsObserved.join('/')}-node</Chip>
@@ -181,36 +221,51 @@ export function ModelPage() {
         </Row>
       </Header>
 
-      <Grid $min="180px">
-        <StatCard>
-          <BigNumber>{formatTps(w.decodeTpsTypical)}</BigNumber>
-          <StatLabel>typical decode tok/s</StatLabel>
-        </StatCard>
-        <StatCard>
-          <BigNumber>{formatTps(w.decodeTpsLatest)}</BigNumber>
-          <StatLabel>latest credible tok/s</StatLabel>
-        </StatCard>
-        <StatCard>
-          <BigNumber>{formatSeconds(w.ttftLatestMedian)}</BigNumber>
-          <StatLabel>latest TTFT</StatLabel>
-        </StatCard>
-        <StatCard>
-          <BigNumber>
-            {w.credibleRunCount}
-            <Muted style={{ fontSize: '1rem' }}> / {w.runCountInWindow}</Muted>
-          </BigNumber>
-          <StatLabel>credible / total runs</StatLabel>
-        </StatCard>
-      </Grid>
+      {isTextGeneration ? (
+        <>
+          <Grid $min="180px">
+            <StatCard>
+              <BigNumber>{headlineTps == null ? 'N/A' : formatTps(headlineTps)}</BigNumber>
+              <StatLabel>typical {headlineConfidence} tok/s</StatLabel>
+            </StatCard>
+            <StatCard>
+              <BigNumber>{latestTps == null ? 'N/A' : formatTps(latestTps)}</BigNumber>
+              <StatLabel>latest {latestConfidence} tok/s</StatLabel>
+            </StatCard>
+            <StatCard>
+              <BigNumber>
+                {w.ttftLatestMedian == null ? 'N/A' : formatSeconds(w.ttftLatestMedian)}
+              </BigNumber>
+              <StatLabel>latest measured TTFT</StatLabel>
+            </StatCard>
+            <StatCard>
+              <BigNumber>
+                {w.credibleRunCount}
+                <Muted style={{ fontSize: '1rem' }}>
+                  {' '}
+                  cred · {w.indicativeRunCount} ind / {w.runCountInWindow}
+                </Muted>
+              </BigNumber>
+              <StatLabel>throughput confidence</StatLabel>
+            </StatCard>
+          </Grid>
 
-      <Section>Throughput history</Section>
-      {timeline.length === 0 ? (
-        <EmptyState label="No runs for this model in the selected period. Widen the window, or select All." />
+          <Section>Throughput history</Section>
+          {timeline.length === 0 ? (
+            <EmptyState label="No runs for this model in the selected period. Widen the window, or select All." />
+          ) : (
+            <TrendChart timeline={timeline} />
+          )}
+        </>
       ) : (
-        <TrendChart timeline={timeline} />
+        <WorkloadNote>
+          This model is measured through {workloadLabel(data.workloads).toLowerCase()} workloads.
+          Generated tokens per second and text TTFT do not apply; the run history remains available
+          below without text-only metric columns.
+        </WorkloadNote>
       )}
 
-      {concurrencyCurves.length > 0 && (
+      {isTextGeneration && concurrencyCurves.length > 0 && (
         <>
           <Section>Concurrency</Section>
           <ConcurrencyCharts>
@@ -225,7 +280,7 @@ export function ModelPage() {
         <>
           <Section>Every run</Section>
           <SortableTable
-            columns={columns}
+            columns={isTextGeneration ? columns : otherColumns}
             rows={timeline}
             rowKey={(t) => t.runId}
             onRowClick={(t) => navigate(`/run/${t.runId}`)}

@@ -21,6 +21,7 @@ import type {
   HardwareCell,
   ModelRollup,
   WindowPoint,
+  WorkloadKind,
 } from './schema';
 import { hasFullyKnownHardware } from './hardware';
 
@@ -78,10 +79,16 @@ export interface WindowedRollup {
   credibleRunCount: number;
   /** Median across credible foxlight per-run medians in the window. */
   decodeTpsTypical: number | null;
+  /** Median across physically plausible low-sample foxlight runs in the window. */
+  decodeTpsIndicative: number | null;
   /** Most-recent credible foxlight point's decode median in the window. */
   decodeTpsLatest: number | null;
-  /** Most-recent credible foxlight point's TTFT median in the window. */
+  /** Most-recent physically plausible low-sample point's decode median. */
+  decodeTpsLatestIndicative: number | null;
+  /** Most-recent measured foxlight TTFT in the window, independent of TPS credibility. */
   ttftLatestMedian: number | null;
+  /** Physically plausible low-sample foxlight points in the window. */
+  indicativeRunCount: number;
   /** Community points in the window (kept separate from headline). */
   communityRunCount: number;
   /** Pass rate across all results in the window (importer parity: every point,
@@ -107,6 +114,13 @@ function foxlightCredible(points: WindowPoint[]): WindowPoint[] {
   );
 }
 
+function foxlightIndicative(points: WindowPoint[]): WindowPoint[] {
+  return points.filter(
+    (point) =>
+      point.tier === 'foxlight' && point.indicative && point.decodeTpsMedian != null,
+  );
+}
+
 /**
  * Recompute one model rollup's headline + hardware cells for a window.
  *
@@ -117,22 +131,31 @@ function foxlightCredible(points: WindowPoint[]): WindowPoint[] {
  * shapes. This is what the hardware filter relies on: selecting "A100" must not
  * surface a model's numbers from the Strix nodes it also ran on in the window.
  * Omit it (or pass `undefined`) for the all-hardware rollup.
+ * `workloads` optionally scopes the rollup to task-appropriate metrics, so a
+ * mixed model's speech runs cannot enter its generated-text Explorer row.
  */
 export function windowRollup(
   rollup: ModelRollup,
   window: TimeWindow,
   now: number,
   hardwareLabel?: string,
+  workloads?: readonly WorkloadKind[],
 ): WindowedRollup {
   const inWindow = rollup.windowPoints.filter(
     (p) =>
       hasFullyKnownHardware(p.hardwareClasses) &&
       isWithinWindow(p.startedAt, window, now) &&
-      (hardwareLabel == null || p.hardwareLabel === hardwareLabel),
+      (hardwareLabel == null || p.hardwareLabel === hardwareLabel) &&
+      (workloads == null || workloads.includes(p.workload)),
   );
   const foxlight = foxlightCredible(inWindow);
+  const indicative = foxlightIndicative(inWindow);
+  const measuredTtft = inWindow.filter(
+    (point) => point.tier === 'foxlight' && point.ttftMedian != null,
+  );
   const typical = median(foxlight.map((p) => p.decodeTpsMedian as number));
   const latest = foxlight.at(-1);
+  const latestIndicative = indicative.at(-1);
 
   const byHardware = new Map<string, WindowPoint[]>();
   for (const p of inWindow) {
@@ -144,6 +167,9 @@ export function windowRollup(
   const hardwareCells: HardwareCell[] = [...byHardware.entries()]
     .map(([label, cells]): HardwareCell => {
       const credible = cells.filter((c) => c.credible && c.decodeTpsMedian != null);
+      const indicativeCells = cells.filter(
+        (cell) => cell.indicative && cell.decodeTpsMedian != null,
+      );
       const lastRunAt =
         cells
           .map((c) => c.startedAt)
@@ -158,6 +184,10 @@ export function windowRollup(
         runCount: cells.length,
         credibleRunCount: credible.length,
         decodeTpsTypical: median(credible.map((c) => c.decodeTpsMedian as number)),
+        decodeTpsIndicative: median(
+          indicativeCells.map((cell) => cell.decodeTpsMedian as number),
+        ),
+        indicativeRunCount: indicativeCells.length,
         passRate: cellResults ? cellPass / cellResults : 0,
         lastRunAt,
         clusterAttributedRunCount: cells.filter((c) => c.clusterAttributed).length,
@@ -177,8 +207,11 @@ export function windowRollup(
     runCountInWindow: inWindow.length,
     credibleRunCount: foxlight.length,
     decodeTpsTypical: typical,
+    decodeTpsIndicative: median(indicative.map((point) => point.decodeTpsMedian as number)),
     decodeTpsLatest: latest?.decodeTpsMedian ?? null,
-    ttftLatestMedian: latest?.ttftMedian ?? null,
+    decodeTpsLatestIndicative: latestIndicative?.decodeTpsMedian ?? null,
+    ttftLatestMedian: measuredTtft.at(-1)?.ttftMedian ?? null,
+    indicativeRunCount: indicative.length,
     communityRunCount: inWindow.filter((p) => p.tier === 'community').length,
     passRate: totalResults ? totalPass / totalResults : 0,
     hasFailuresInWindow: totalResults - totalPass > 0,

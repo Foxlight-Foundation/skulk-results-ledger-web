@@ -23,30 +23,39 @@ interface Point {
   name: string;
   family: string;
   fill: string;
+  confidence: 'credible' | 'indicative';
 }
 
 /**
- * Speed-vs-latency scatter: y = typical decode tok/s (credible), x = TTFT.
+ * Speed-vs-latency scatter: y = typical decode tok/s, x = independently
+ * measured TTFT.
  * The upper-left is the sweet spot (fast decode, low latency). Colored by
- * engine family, sized by run count. Only models with both a credible
- * throughput and a TTFT appear here; the rest live in the table below.
+ * engine family and sized by run count. Credible points are solid; a model
+ * with only physically plausible low-sample measurements is shown dimmed and
+ * labeled indicative rather than silently disappearing.
  */
 export function SpeedScatter({ models }: { models: ModelRollup[] }) {
   const palette = useChartPalette();
   const navigate = useNavigate();
 
   const points: Point[] = models
-    .filter((m) => m.decodeTpsTypical != null && m.ttftLatestMedian != null)
+    .filter(
+      (m) =>
+        (m.decodeTpsTypical != null || m.decodeTpsIndicative != null) &&
+        m.ttftLatestMedian != null,
+    )
     .map((m) => {
       const fam = FAMILY_META[m.family].color;
+      const confidence = m.decodeTpsTypical != null ? 'credible' : 'indicative';
       return {
         x: m.ttftLatestMedian as number,
-        y: m.decodeTpsTypical as number,
+        y: (m.decodeTpsTypical ?? m.decodeTpsIndicative) as number,
         z: Math.max(m.runCount, 1),
         slug: m.slug,
         name: m.displayName,
         family: FAMILY_META[m.family].label,
         fill: fam === 'cyan' ? palette.cyan : fam === 'amber' ? palette.amber : palette.neutral,
+        confidence,
       };
     });
 
@@ -54,7 +63,9 @@ export function SpeedScatter({ models }: { models: ModelRollup[] }) {
     <ChartCard>
       <ChartHeading>
         <ChartTitle>Speed vs. latency</ChartTitle>
-        <ChartHint>y: decode tok/s · x: time to first token · size: runs</ChartHint>
+        <ChartHint>
+          y: decode tok/s · x: time to first token · size: runs · dim: indicative
+        </ChartHint>
       </ChartHeading>
       <ResponsiveContainer width="100%" height={420}>
         <ScatterChart margin={{ top: 12, right: 24, bottom: 28, left: 8 }}>
@@ -86,8 +97,12 @@ export function SpeedScatter({ models }: { models: ModelRollup[] }) {
                 <TooltipShell>
                   <strong>{p.name}</strong>
                   <div>{p.family}</div>
-                  <div>decode {formatTps(p.y)} tok/s · TTFT {formatSeconds(p.x)}</div>
-                  <div style={{ opacity: 0.7 }}>{p.z} run(s) · click to open</div>
+                  <div>
+                    decode {formatTps(p.y)} tok/s · TTFT {formatSeconds(p.x)}
+                  </div>
+                  <div style={{ opacity: 0.7 }}>
+                    {p.confidence} · {p.z} run(s) · click to open
+                  </div>
                 </TooltipShell>
               );
             }}
@@ -103,7 +118,7 @@ export function SpeedScatter({ models }: { models: ModelRollup[] }) {
             shape="circle"
           >
             {points.map((p) => (
-              <Cell key={p.slug} fill={p.fill} />
+              <Cell key={p.slug} fill={p.fill} fillOpacity={p.confidence === 'credible' ? 0.85 : 0.35} />
             ))}
           </Scatter>
         </ScatterChart>

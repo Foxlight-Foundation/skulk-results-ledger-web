@@ -22,9 +22,9 @@ import {
 
 /**
  * Decode throughput over time for one model. The line connects only credible
- * points; non-credible runs (single-rep / short-output) are shown as dimmed
- * reference dots so the history is complete without letting noise drive the
- * trend line.
+ * points. Physically plausible low-sample runs are shown as amber indicative
+ * dots; rejected/noisy runs remain neutral, so the history is complete without
+ * letting either group drive the credible trend line.
  */
 export function TrendChart({ timeline }: { timeline: ModelTimePoint[] }) {
   const palette = useChartPalette();
@@ -38,15 +38,16 @@ export function TrendChart({ timeline }: { timeline: ModelTimePoint[] }) {
     label: formatDate(t.startedAt),
     value: t.decodeTpsMedian as number,
     credible: t.credible,
+    indicative: t.indicative,
     version: t.skulkVersion,
     line: t.credible ? (t.decodeTpsMedian as number) : null,
   }));
 
   // Scale the axis to the credible points so a dimmed artifact (an implausible
   // wall-throughput spike) clips out of view instead of crushing the real signal.
-  const credibleValues = series.filter((s) => s.credible).map((s) => s.value);
-  const yMax = credibleValues.length
-    ? Math.ceil((Math.max(...credibleValues) * 1.2) / 10) * 10
+  const scaleValues = series.filter((s) => s.credible || s.indicative).map((s) => s.value);
+  const yMax = scaleValues.length
+    ? Math.ceil((Math.max(...scaleValues) * 1.2) / 10) * 10
     : 'auto';
 
   if (series.length === 0) {
@@ -62,7 +63,7 @@ export function TrendChart({ timeline }: { timeline: ModelTimePoint[] }) {
     <ChartCard>
       <ChartHeading>
         <ChartTitle>Decode throughput over time</ChartTitle>
-        <ChartHint>solid = credible · dot = single-rep / short</ChartHint>
+        <ChartHint>line = credible · amber dot = indicative · gray dot = rejected</ChartHint>
       </ChartHeading>
       <ResponsiveContainer width="100%" height={300}>
         <LineChart data={series} margin={{ top: 12, right: 20, bottom: 8, left: 4 }}>
@@ -93,7 +94,9 @@ export function TrendChart({ timeline }: { timeline: ModelTimePoint[] }) {
                   <strong>{formatTps(p.value)} tok/s</strong>
                   <div>{p.label}</div>
                   {p.version && <div>Skulk {p.version}</div>}
-                  <div style={{ opacity: 0.7 }}>{p.credible ? 'credible' : 'low-confidence sample'}</div>
+                  <div style={{ opacity: 0.7 }}>
+                    {p.credible ? 'credible' : p.indicative ? 'indicative' : 'excluded from rollups'}
+                  </div>
                 </TooltipShell>
               );
             }}
@@ -115,9 +118,9 @@ export function TrendChart({ timeline }: { timeline: ModelTimePoint[] }) {
                 x={p.idx}
                 y={p.value}
                 r={3}
-                fill={palette.neutral}
+                fill={p.indicative ? palette.amber : palette.neutral}
                 stroke="none"
-                fillOpacity={0.5}
+                fillOpacity={p.indicative ? 0.65 : 0.4}
               />
             ))}
         </LineChart>

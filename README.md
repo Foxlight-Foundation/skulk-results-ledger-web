@@ -12,7 +12,10 @@ caveats. Reports with missing or partially unknown hardware remain in the
 durable results store but are omitted from the public dashboard and its
 aggregates. Throughput headlines are the median of *credible* samples only (multi-rep, not
 short-output-dominated, physically plausible), so a five-token answer can never
-become a record.
+become a record. Physically plausible low-sample throughput may appear as an
+explicitly labeled *indicative* fallback, never blended into the credible
+headline. Text-generation metrics are kept separate from speech, audio, and
+embedding workloads whose performance requires different units.
 
 ## No backend
 

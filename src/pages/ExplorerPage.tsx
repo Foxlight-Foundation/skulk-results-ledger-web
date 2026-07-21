@@ -11,7 +11,13 @@ import type { Caveat, EngineFamily, ModelRollup } from '../data/schema';
 import { FAMILY_META, formatSeconds, formatTps } from '../data/format';
 import { useIndex } from '../data/useLedger';
 import { useWindow } from '../data/useWindow';
-import { isWithinWindow, windowRollup } from '../data/window';
+import {
+  hasTextGenerationWorkload,
+  NON_TEXT_WORKLOADS,
+  TEXT_GENERATION_WORKLOADS,
+  workloadLabel,
+} from '../data/workload';
+import { isWithinWindow, type WindowedRollup, windowRollup } from '../data/window';
 
 const Hero = styled.header`
   padding: ${({ theme }) => `${theme.spacing.xl} 0 ${theme.spacing.lg}`};
@@ -114,6 +120,21 @@ const HiddenNote = styled.p`
   color: #ffffff;
 `;
 
+const SectionNote = styled.p`
+  color: ${({ theme }) => theme.colors.text2};
+  margin: ${({ theme }) => `-${theme.spacing.sm} 0 ${theme.spacing.md}`};
+  max-width: 74ch;
+`;
+
+const IndicativeMark = styled.span`
+  display: block;
+  color: ${({ theme }) => theme.colors.amberHi};
+  font-family: ${({ theme }) => theme.typography.fontFamily.mono};
+  font-size: ${({ theme }) => theme.typography.fontSize.eyebrow};
+  font-weight: 500;
+  line-height: 1.2;
+`;
+
 const FAMILIES: (EngineFamily | 'all')[] = ['all', 'mlx', 'llama_cpp'];
 
 const HardwareSelect = styled.select`
@@ -138,6 +159,56 @@ const HardwareSelect = styled.select`
 // to zero. The displayed count never drops below this baseline.
 const SKULK_VERSION_BASELINE = 8;
 
+function scopedModel(model: ModelRollup, scoped: WindowedRollup): ModelRollup {
+  const caveats: Caveat[] = model.caveats.filter((caveat) => caveat !== 'has_failures');
+  if (scoped.hasFailuresInWindow) caveats.push('has_failures');
+  return {
+    ...model,
+    decodeTpsTypical: scoped.decodeTpsTypical,
+    decodeTpsIndicative: scoped.decodeTpsIndicative,
+    decodeTpsLatest: scoped.decodeTpsLatest,
+    decodeTpsLatestIndicative: scoped.decodeTpsLatestIndicative,
+    ttftLatestMedian: scoped.ttftLatestMedian,
+    hardwareCells: scoped.hardwareCells,
+    credibleRunCount: scoped.credibleRunCount,
+    indicativeRunCount: scoped.indicativeRunCount,
+    runCount: scoped.runCountInWindow,
+    communityRunCount: scoped.communityRunCount,
+    passRate: scoped.passRate,
+    caveats,
+    nodeCountsObserved: scoped.nodeCountsObserved,
+  };
+}
+
+function throughputSortValue(model: ModelRollup): number {
+  return model.decodeTpsTypical ?? model.decodeTpsIndicative ?? -1;
+}
+
+function ThroughputValue({ model }: { model: ModelRollup }) {
+  if (model.decodeTpsTypical != null) {
+    return <strong style={{ color: '#f0ede8' }}>{formatTps(model.decodeTpsTypical)}</strong>;
+  }
+  if (model.decodeTpsIndicative != null) {
+    return (
+      <span title="Measured, physically plausible throughput from low-sample runs; not a credible headline.">
+        <strong style={{ color: '#f0ede8', opacity: 0.78 }}>
+          {formatTps(model.decodeTpsIndicative)}
+        </strong>
+        <IndicativeMark>indicative</IndicativeMark>
+      </span>
+    );
+  }
+  return <Muted title="No usable generated-text throughput measurement in this period.">N/A</Muted>;
+}
+
+function TtftValue({ value }: { value: number | null }) {
+  return value == null ? (
+    <Muted title="No time-to-first-token measurement in this period.">N/A</Muted>
+  ) : (
+    <>{formatSeconds(value)}</>
+  );
+}
+
 export function ExplorerPage() {
   const { data, error, loading } = useIndex();
   const navigate = useNavigate();
@@ -152,22 +223,31 @@ export function ExplorerPage() {
   // all-time baked values so every number reflects the selected period; a
   // model with no runs in the window is hidden (its absence is bound to the
   // period, not "never tested"), and counted for the indicator below.
-  const { models, hiddenByWindow } = useMemo(() => {
-    if (!data) return { models: [] as ModelRollup[], hiddenByWindow: 0 };
+  const { textModels, otherModels, hiddenByWindow } = useMemo(() => {
+    if (!data) {
+      return {
+        textModels: [] as ModelRollup[],
+        otherModels: [] as ModelRollup[],
+        hiddenByWindow: 0,
+      };
+    }
     const base = data.models.filter((m) => {
       if (family !== 'all' && m.family !== family) return false;
       if (query && !m.displayName.toLowerCase().includes(query.toLowerCase())) return false;
       return true;
     });
-    const visible: ModelRollup[] = [];
+    const visibleText: ModelRollup[] = [];
+    const visibleOther: ModelRollup[] = [];
     let hidden = 0;
     for (const m of base) {
+      const isTextGeneration = hasTextGenerationWorkload(m.workloads);
+      const workloads = isTextGeneration ? TEXT_GENERATION_WORKLOADS : NON_TEXT_WORKLOADS;
       // The period indicator counts models with no data in the window at all,
       // independent of the hardware filter, so compute the unscoped rollup for
       // that decision first.
-      const w = windowRollup(m, window, now);
+      const w = windowRollup(m, window, now, undefined, workloads);
       if (!w.hasWindowData) {
-        hidden += 1;
+        if (isTextGeneration) hidden += 1;
         continue;
       }
       // When a specific hardware is selected, recompute the row from ONLY that
@@ -176,7 +256,8 @@ export function ExplorerPage() {
       // other shapes the model also ran on in the window. A model not run on
       // the selected hardware in the period drops out here (hidden by hardware,
       // not by window, so it is not counted in the period indicator).
-      const scoped = hardware === 'all' ? w : windowRollup(m, window, now, hardware);
+      const scoped =
+        hardware === 'all' ? w : windowRollup(m, window, now, hardware, workloads);
       // Require a first-party (foxlight) cell on the selected hardware, not just
       // any windowed point: hardwareCells are foxlight-only, so a model with
       // only community points on this shape in the period has an empty scoped
@@ -185,28 +266,13 @@ export function ExplorerPage() {
       // which keyed on foxlight cells; tiers never blend).
       if (hardware !== 'all' && !scoped.hardwareCells.some((c) => c.label === hardware))
         continue;
-      // Recompute the has_failures caveat from the (scoped) window so it cannot
-      // contradict the shown pass rate (a row showing 100% pass in the
-      // period must not still wear an all-time "failures" chip). Other caveats
-      // are data-provenance notes that remain true about the model.
-      const caveats: Caveat[] = m.caveats.filter((c) => c !== 'has_failures');
-      if (scoped.hasFailuresInWindow) caveats.push('has_failures');
-      visible.push({
-        ...m,
-        decodeTpsTypical: scoped.decodeTpsTypical,
-        decodeTpsLatest: scoped.decodeTpsLatest,
-        ttftLatestMedian: scoped.ttftLatestMedian,
-        hardwareCells: scoped.hardwareCells,
-        credibleRunCount: scoped.credibleRunCount,
-        runCount: scoped.runCountInWindow,
-        communityRunCount: scoped.communityRunCount,
-        passRate: scoped.passRate,
-        caveats,
-        nodeCountsObserved: scoped.nodeCountsObserved,
-      });
+      const visible = scopedModel(m, scoped);
+      if (isTextGeneration) visibleText.push(visible);
+      else visibleOther.push(visible);
     }
-    visible.sort((a, b) => (b.decodeTpsTypical ?? -1) - (a.decodeTpsTypical ?? -1));
-    return { models: visible, hiddenByWindow: hidden };
+    visibleText.sort((a, b) => throughputSortValue(b) - throughputSortValue(a));
+    visibleOther.sort((a, b) => a.displayName.localeCompare(b.displayName));
+    return { textModels: visibleText, otherModels: visibleOther, hiddenByWindow: hidden };
   }, [data, family, hardware, query, window, now]);
 
   // The Period control sits above these tiles, so the tiles reflect the same
@@ -220,7 +286,11 @@ export function ExplorerPage() {
     const versions = new Set(
       runs.map((r) => r.skulkVersion).filter((v): v is string => v != null),
     );
-    const modelCount = data.models.filter((m) => windowRollup(m, window, now).hasWindowData).length;
+    const modelCount = data.models.filter(
+      (m) =>
+        hasTextGenerationWorkload(m.workloads) &&
+        windowRollup(m, window, now, undefined, TEXT_GENERATION_WORKLOADS).hasWindowData,
+    ).length;
     const versionCount =
       window == null ? Math.max(versions.size, SKULK_VERSION_BASELINE) : versions.size;
     return { runCount: runs.length, modelCount, suiteCount: suites.size, versionCount };
@@ -246,15 +316,15 @@ export function ExplorerPage() {
       key: 'decode',
       header: 'Typical tok/s',
       align: 'right',
-      sortValue: (m) => m.decodeTpsTypical ?? -1,
-      render: (m) => <strong style={{ color: '#f0ede8' }}>{formatTps(m.decodeTpsTypical)}</strong>,
+      sortValue: throughputSortValue,
+      render: (m) => <ThroughputValue model={m} />,
     },
     {
       key: 'ttft',
       header: 'TTFT',
       align: 'right',
       sortValue: (m) => m.ttftLatestMedian ?? Number.MAX_SAFE_INTEGER,
-      render: (m) => formatSeconds(m.ttftLatestMedian),
+      render: (m) => <TtftValue value={m.ttftLatestMedian} />,
     },
     {
       key: 'nodes',
@@ -270,9 +340,63 @@ export function ExplorerPage() {
       sortValue: (m) => m.runCount,
       render: (m) => (
         <span>
-          {m.runCount} <Muted>({m.credibleRunCount} cred)</Muted>
+          {m.runCount}{' '}
+          <Muted>
+            ({m.credibleRunCount} cred
+            {m.indicativeRunCount > 0 ? ` · ${m.indicativeRunCount} ind` : ''})
+          </Muted>
         </span>
       ),
+    },
+    {
+      key: 'pass',
+      header: 'Pass rate',
+      align: 'center',
+      sortValue: (m) => m.passRate,
+      render: (m) => <PassRateChip passRate={m.passRate} />,
+    },
+    {
+      key: 'caveats',
+      header: 'Caveats',
+      render: (m) => (
+        <Row $gap="5px" $wrap>
+          <CaveatList caveats={m.caveats} />
+        </Row>
+      ),
+    },
+  ];
+
+  const otherColumns: Column<ModelRollup>[] = [
+    {
+      key: 'name',
+      header: 'Model',
+      sortValue: (m) => m.displayName,
+      render: (m) => (
+        <Row $gap="10px">
+          <strong style={{ color: 'inherit' }}>{m.displayName}</strong>
+          <FamilyBadge family={m.family} />
+        </Row>
+      ),
+    },
+    {
+      key: 'workload',
+      header: 'Workload',
+      sortValue: (m) => workloadLabel(m.workloads),
+      render: (m) => workloadLabel(m.workloads),
+    },
+    {
+      key: 'nodes',
+      header: 'Nodes',
+      align: 'center',
+      sortValue: (m) => m.nodeCountsObserved[0] ?? 0,
+      render: (m) => (m.nodeCountsObserved.length ? m.nodeCountsObserved.join(', ') : 'N/A'),
+    },
+    {
+      key: 'runs',
+      header: 'Runs',
+      align: 'right',
+      sortValue: (m) => m.runCount,
+      render: (m) => m.runCount,
     },
     {
       key: 'pass',
@@ -298,8 +422,9 @@ export function ExplorerPage() {
         <Eyebrow>Skulk results ledger</Eyebrow>
         <Title>Skulk performance.</Title>
         <Sub>
-          Every benchmark run across the Foxlight fleet. Throughput is the median of valid samples
-          only. Click any point or row for the full run behind it.
+          Generated-text performance across the Foxlight fleet. Credible throughput remains the
+          headline; physically plausible low-sample measurements are labeled indicative instead of
+          appearing missing. Click any point or row for the full run behind it.
         </Sub>
       </Hero>
 
@@ -310,7 +435,7 @@ export function ExplorerPage() {
         </Stat>
         <Stat>
           <StatNum>{periodStats.modelCount}</StatNum>
-          <StatLabel>models measured</StatLabel>
+          <StatLabel>text models measured</StatLabel>
         </Stat>
         <Stat>
           <StatNum>{periodStats.suiteCount}</StatNum>
@@ -322,10 +447,14 @@ export function ExplorerPage() {
         </Stat>
       </Stats>
 
-      {models.some((m) => m.decodeTpsTypical != null && m.ttftLatestMedian != null) ? (
-        <SpeedScatter models={models} />
+      {textModels.some(
+        (m) =>
+          (m.decodeTpsTypical != null || m.decodeTpsIndicative != null) &&
+          m.ttftLatestMedian != null,
+      ) ? (
+        <SpeedScatter models={textModels} />
       ) : (
-        <EmptyState label="No models have both a credible throughput and a TTFT under this filter." />
+        <EmptyState label="No text models have measured throughput and TTFT under this filter." />
       )}
 
       <Controls $gap="8px">
@@ -349,14 +478,18 @@ export function ExplorerPage() {
         </HardwareSelect>
       </Controls>
 
-      <SectionLabel>All models</SectionLabel>
+      <SectionLabel>Text generation</SectionLabel>
+      <SectionNote>
+        Chat, code, tools, and vision-to-text workloads. Indicative values are measured and
+        physically plausible, but do not meet the strict per-run sample threshold.
+      </SectionNote>
       {hiddenByWindow > 0 && (
         <HiddenNote>
           {hiddenByWindow} {hiddenByWindow === 1 ? 'model' : 'models'} hidden with no runs in this
           period. Widen the window to see them.
         </HiddenNote>
       )}
-      {models.length === 0 ? (
+      {textModels.length === 0 ? (
         <EmptyState
           label={
             hiddenByWindow > 0
@@ -367,12 +500,30 @@ export function ExplorerPage() {
       ) : (
         <SortableTable
           columns={columns}
-          rows={models}
+          rows={textModels}
           rowKey={(m) => m.slug}
           onRowClick={(m) => navigate(`/model/${m.slug}`)}
           initialSortKey="decode"
           initialSortDir="desc"
         />
+      )}
+
+      {otherModels.length > 0 && (
+        <>
+          <SectionLabel>Other workloads</SectionLabel>
+          <SectionNote>
+            Speech, audio, and embedding runs use task-specific performance units, so they are not
+            presented as generated tokens per second or time to first token.
+          </SectionNote>
+          <SortableTable
+            columns={otherColumns}
+            rows={otherModels}
+            rowKey={(m) => m.slug}
+            onRowClick={(m) => navigate(`/model/${m.slug}`)}
+            initialSortKey="workload"
+            initialSortDir="asc"
+          />
+        </>
       )}
     </Page>
   );

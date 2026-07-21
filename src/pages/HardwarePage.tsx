@@ -10,6 +10,7 @@ import { formatTps } from '../data/format';
 import { hasFullyKnownHardware } from '../data/hardware';
 import { useIndex } from '../data/useLedger';
 import { useWindow } from '../data/useWindow';
+import { hasTextGenerationWorkload, TEXT_GENERATION_WORKLOADS } from '../data/workload';
 import { windowRollup } from '../data/window';
 
 const Title = styled.h1`
@@ -85,9 +86,10 @@ const FootNote = styled.p`
 /**
  * Model-by-hardware matrix: one row per model, one column per distinct
  * hardware shape observed, cell = typical credible decode tok/s on that
- * hardware. Cells without a credible sample show the run count dimmed, so
- * "we ran it but the numbers did not clear the bar" stays distinguishable
- * from "never ran there".
+ * hardware. A physically plausible low-sample result is shown as indicative;
+ * cells without usable generated-text throughput show the run count dimmed,
+ * so "we ran it but no number cleared either bar" stays distinguishable from
+ * "never ran there".
  */
 export function HardwarePage() {
   const { data, error, loading } = useIndex();
@@ -100,10 +102,18 @@ export function HardwarePage() {
     // Window each model's per-hardware cells, then build the columns and rows
     // from the windowed cells so the whole matrix reflects the selected period;
     // a model with no windowed hardware cells drops out.
-    const windowed: ModelRollup[] = data.models.map((m) => ({
-      ...m,
-      hardwareCells: windowRollup(m, window, now).hardwareCells,
-    }));
+    const windowed: ModelRollup[] = data.models
+      .filter((model) => hasTextGenerationWorkload(model.workloads))
+      .map((model) => ({
+        ...model,
+        hardwareCells: windowRollup(
+          model,
+          window,
+          now,
+          undefined,
+          TEXT_GENERATION_WORKLOADS,
+        ).hardwareCells,
+      }));
     // Columns: known hardware shapes actually observed in the window, widest
     // coverage first so the interesting columns lead.
     const coverage = new Map<string, number>();
@@ -130,9 +140,9 @@ export function HardwarePage() {
       <Eyebrow>Hardware</Eyebrow>
       <Title>Same model, different metal.</Title>
       <Sub>
-        Typical decode tok/s per hardware shape: the median of credible per-run medians for that
-        model ON that hardware. Attribution is exact where the run recorded placement nodes.
-        Dimmed counts mean runs exist there but none cleared the credibility bar.
+        Generated-text decode tok/s per hardware shape. Credible per-run medians remain the
+        headline; a physically plausible low-sample median is explicitly marked indicative.
+        Attribution is exact where the run recorded placement nodes.
       </Sub>
 
       <Scroll>
@@ -164,12 +174,17 @@ export function HardwarePage() {
                   return (
                     <td
                       key={label}
-                      title={`${cell.runCount} run(s), ${cell.credibleRunCount} credible${clusterNote}`}
+                      title={`${cell.runCount} run(s), ${cell.credibleRunCount} credible, ${cell.indicativeRunCount} indicative${clusterNote}`}
                     >
                       {cell.decodeTpsTypical != null ? (
                         <Cell $credible>
                           {formatTps(cell.decodeTpsTypical)}
                           {cell.clusterAttributedRunCount > 0 && <Muted>*</Muted>}
+                        </Cell>
+                      ) : cell.decodeTpsIndicative != null ? (
+                        <Cell $credible={false}>
+                          {formatTps(cell.decodeTpsIndicative)} indicative
+                          {cell.clusterAttributedRunCount > 0 && '*'}
                         </Cell>
                       ) : (
                         <Cell $credible={false}>

@@ -45,6 +45,7 @@ import type {
 import { LEDGER_SCHEMA_VERSION } from '../src/data/schema.ts';
 import { hasFullyKnownHardware } from '../src/data/hardware.ts';
 import { suiteCatalogEntry } from '../src/data/suite-catalog.ts';
+import { workloadKindForTestSet } from '../src/data/workload.ts';
 import { nodeMemoryGb, profileOf, UNKNOWN_HARDWARE } from './hardware-taxonomy.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -548,10 +549,12 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
     const nodes = (entries.at(-1) ?? allEntries.at(-1))?.detail.nodes ?? [];
     const timeline: ModelTimePoint[] = entries.map(({ detail, result }) => {
       const total = result.plainPassCount + result.plainFailCount;
-      const credible =
-        result.decodeTps.sampleCount >= LOW_SAMPLE_THRESHOLD &&
+      const hasPlausibleDecode =
+        result.decodeTps.median != null &&
+        result.decodeTps.sampleCount > 0 &&
         !result.caveats.includes('short_output_dominant') &&
-        (result.decodeTps.median == null || result.decodeTps.median <= IMPLAUSIBLE_TPS);
+        result.decodeTps.median <= IMPLAUSIBLE_TPS;
+      const credible = hasPlausibleDecode && result.decodeTps.sampleCount >= LOW_SAMPLE_THRESHOLD;
       return {
         runId: detail.runId,
         startedAt: detail.startedAt,
@@ -563,7 +566,9 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
         cacheClass: detail.cacheClass,
         passRate: total ? result.plainPassCount / total : 0,
         caveats: result.caveats,
+        workload: workloadKindForTestSet(detail.testSet),
         credible,
+        indicative: hasPlausibleDecode && !credible,
         hardware: result.hardware,
         tier: detail.tier,
       };
@@ -584,6 +589,9 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
     });
     const hardwareCells: HardwareCell[] = [...byHardware.entries()].map(([label, cells]) => {
       const crediblePoints = cells.filter((c) => c.point.credible && c.point.decodeTpsMedian != null);
+      const indicativePoints = cells.filter(
+        (c) => c.point.indicative && c.point.decodeTpsMedian != null,
+      );
       const cellResults = cells.reduce(
         (n, c) => n + c.entry.result.plainPassCount + c.entry.result.plainFailCount,
         0,
@@ -595,6 +603,10 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
         runCount: cells.length,
         credibleRunCount: crediblePoints.length,
         decodeTpsTypical: median(crediblePoints.map((c) => c.point.decodeTpsMedian as number)),
+        decodeTpsIndicative: median(
+          indicativePoints.map((c) => c.point.decodeTpsMedian as number),
+        ),
+        indicativeRunCount: indicativePoints.length,
         passRate: cellResults ? cellPass / cellResults : 0,
         lastRunAt: cells.map((c) => c.point.startedAt).filter((v): v is string => v != null).sort().at(-1) ?? null,
         clusterAttributedRunCount: cells.filter((c) => c.entry.result.hardwareAttribution === 'cluster').length,
@@ -615,14 +627,22 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
         points: e.result.concurrencyPoints as ConcurrencyPoint[],
       }));
 
-    // Headline numbers rest on credible FOXLIGHT points only: tiers never
-    // blend, and a single-rep wall spike can never set the record. Community
-    // points stay in the timeline, badged.
+    // Credible and indicative FOXLIGHT series stay separate: the strict series
+    // remains the headline source, while physically plausible low-sample runs
+    // can back an explicitly labeled fallback instead of appearing missing.
+    // Community points stay in the timeline and never blend into either.
     const credible = timeline.filter(
       (t) => t.credible && t.decodeTpsMedian != null && t.tier === 'foxlight',
     );
+    const indicative = timeline.filter(
+      (t) => t.indicative && t.decodeTpsMedian != null && t.tier === 'foxlight',
+    );
+    const measuredTtft = timeline.filter(
+      (t) => t.ttftMedian != null && t.tier === 'foxlight',
+    );
     const typical = median(credible.map((t) => t.decodeTpsMedian as number));
     const latestCredible = credible.at(-1);
+    const latestIndicative = indicative.at(-1);
     const totalResults = entries.reduce(
       (n, e) => n + e.result.plainPassCount + e.result.plainFailCount,
       0,
@@ -638,13 +658,19 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
       slug: slugify(modelId),
       displayName: displayName(modelId),
       family: familyOf(modelId, nodes),
+      workloads: [
+        ...new Set(allEntries.map((entry) => workloadKindForTestSet(entry.detail.testSet))),
+      ],
       runCount: entries.length,
       totalResults,
       passRate: totalResults ? totalPass / totalResults : 0,
       decodeTpsTypical: typical,
+      decodeTpsIndicative: median(indicative.map((t) => t.decodeTpsMedian as number)),
       decodeTpsLatest: latestCredible?.decodeTpsMedian ?? null,
-      ttftLatestMedian: latestCredible?.ttftMedian ?? null,
+      decodeTpsLatestIndicative: latestIndicative?.decodeTpsMedian ?? null,
+      ttftLatestMedian: measuredTtft.at(-1)?.ttftMedian ?? null,
       credibleRunCount: credible.length,
+      indicativeRunCount: indicative.length,
       nodeCountsObserved: nodeCounts,
       lastRunAt: latest?.detail.startedAt ?? null,
       caveats: [...new Set(entries.flatMap((e) => e.result.caveats))],
@@ -657,6 +683,8 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
         decodeTpsMedian: t.decodeTpsMedian,
         ttftMedian: t.ttftMedian,
         credible: t.credible,
+        indicative: t.indicative,
+        workload: t.workload,
         tier: t.tier,
         hardwareLabel: t.hardware.label,
         hardwareClasses: t.hardware.classes,
@@ -669,7 +697,11 @@ function buildModelHistories(details: RunDetail[]): ModelHistory[] {
       concurrencyCurves,
     });
   }
-  histories.sort((a, b) => (b.decodeTpsTypical ?? -1) - (a.decodeTpsTypical ?? -1));
+  histories.sort(
+    (a, b) =>
+      (b.decodeTpsTypical ?? b.decodeTpsIndicative ?? -1) -
+      (a.decodeTpsTypical ?? a.decodeTpsIndicative ?? -1),
+  );
   return histories;
 }
 
