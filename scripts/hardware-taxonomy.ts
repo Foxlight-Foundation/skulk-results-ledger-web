@@ -16,6 +16,7 @@
  */
 
 import type { HardwareProfile } from '../src/data/schema.ts';
+import { hasFullyKnownHardware } from '../src/data/hardware.ts';
 
 /**
  * Standard memory tiers in GB. Raw readings land near-but-not-on marketing
@@ -233,6 +234,6 @@ export function profileOf(
     label,
     nodeCount: nodes.length,
     homogeneous: classes.length === 1,
-    known: classes.some((c) => c !== 'unknown'),
+    known: hasFullyKnownHardware(classes),
   };
 }

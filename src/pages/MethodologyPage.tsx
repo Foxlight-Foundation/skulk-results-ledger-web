@@ -52,7 +52,7 @@ export function MethodologyPage() {
       <Title>Methodology</Title>
       <Lead>
         These numbers come from the Skulk test harness running chat, code, and tool workloads
-        against real hardware. All runs included.
+        against real hardware. Every hardware-attributed run is included.
       </Lead>
 
       <H2>How throughput is computed</H2>
@@ -112,9 +112,11 @@ export function MethodologyPage() {
         no such signal keeps its plain RAM reading. A run&apos;s hardware is the multiset of
         its node classes; a model&apos;s hardware is the classes of the nodes that actually served
         it where the run recorded placement (marked exact), or the whole-cluster shape otherwise
-        (marked cluster). Runs that predate hardware fingerprints show as unknown hardware rather
-        than being guessed. Classification lives in the site importer, not the harness, so a
-        taxonomy fix reclassifies all history on the next rebuild.
+        (marked cluster). Reports whose hardware profile is missing or only partially classifiable
+        remain in the durable archive but are omitted from every dashboard view and aggregate; a
+        measurement is not presented without the complete hardware context needed to interpret it.
+        Classification lives in the site importer, not the harness, so a taxonomy fix reclassifies
+        all history on the next rebuild.
       </P>
 
       <H2>Where the data comes from</H2>

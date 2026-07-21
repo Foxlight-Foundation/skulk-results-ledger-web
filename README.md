@@ -7,8 +7,10 @@ model explorer, per-model throughput history, a full run audit trail, suite
 coverage, and an in-browser run-vs-run comparison.
 
 It is a **ledger, not a leaderboard**. Failed, partial, single-rep, and
-short-output runs are all kept and shown with their caveats. Throughput
-headlines are the median of *credible* samples only (multi-rep, not
+short-output runs with classifiable hardware are all kept and shown with their
+caveats. Reports with missing or partially unknown hardware remain in the
+durable results store but are omitted from the public dashboard and its
+aggregates. Throughput headlines are the median of *credible* samples only (multi-rep, not
 short-output-dominated, physically plausible), so a five-token answer can never
 become a record.
 

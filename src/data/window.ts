@@ -22,6 +22,7 @@ import type {
   ModelRollup,
   WindowPoint,
 } from './schema';
+import { hasFullyKnownHardware } from './hardware';
 
 /** A selected window in days, or `null` for all-time. */
 export type TimeWindow = 7 | 14 | 30 | 90 | null;
@@ -125,6 +126,7 @@ export function windowRollup(
 ): WindowedRollup {
   const inWindow = rollup.windowPoints.filter(
     (p) =>
+      hasFullyKnownHardware(p.hardwareClasses) &&
       isWithinWindow(p.startedAt, window, now) &&
       (hardwareLabel == null || p.hardwareLabel === hardwareLabel),
   );

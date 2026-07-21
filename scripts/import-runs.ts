@@ -43,6 +43,7 @@ import type {
   SuiteRollup,
 } from '../src/data/schema.ts';
 import { LEDGER_SCHEMA_VERSION } from '../src/data/schema.ts';
+import { hasFullyKnownHardware } from '../src/data/hardware.ts';
 import { suiteCatalogEntry } from '../src/data/suite-catalog.ts';
 import { nodeMemoryGb, profileOf, UNKNOWN_HARDWARE } from './hardware-taxonomy.ts';
 
@@ -383,6 +384,7 @@ function buildRunDetail(
   }
 
   const models: RunModelResult[] = [];
+  const publishableModelIds = new Set<string>();
   for (const [modelId, rs] of byModel) {
     // Concurrency-sweep results are surfaced as their own curve; the plain
     // decode/ttft aggregates must never include them (aggregate throughput
@@ -405,6 +407,11 @@ function buildRunDetail(
     const plainIssueCount = plain.reduce((n, r) => n + (r.issues?.length ?? 0), 0);
     const plainReps = new Set(plain.map((r) => r.repetition)).size;
     const { hardware, attribution } = modelHardware(modelId);
+    // A benchmark without hardware context is not comparable. Keep its raw
+    // report in the durable store, but do not let the model result feed any
+    // public detail, rollup, timeline, suite total, or chart.
+    if (!hardware.known) continue;
+    publishableModelIds.add(modelId);
     models.push({
       modelId,
       passCount,
@@ -423,10 +430,12 @@ function buildRunDetail(
   }
   models.sort((a, b) => a.modelId.localeCompare(b.modelId));
 
-  const passCount = results.filter((r) => r.passed).length;
-  const failCount = results.length - passCount;
+  const publishableResults = results.filter((r) => publishableModelIds.has(r.model_id));
+  const passCount = publishableResults.filter((r) => r.passed).length;
+  const failCount = publishableResults.length - passCount;
   const issueCount =
-    (report.issues?.length ?? 0) + results.reduce((n, r) => n + (r.issues?.length ?? 0), 0);
+    (report.issues?.length ?? 0) +
+    publishableResults.reduce((n, r) => n + (r.issues?.length ?? 0), 0);
   const hasFingerprint = fp != null;
   const runCaveats: Caveat[] = [];
   if (!hasFingerprint) runCaveats.push('missing_fingerprint');
@@ -435,7 +444,7 @@ function buildRunDetail(
   // wall-throughput fallback rather than a measured decode window -- not only
   // the no-data case. Keeps the caveat honest with the methodology page.
   if (
-    results.some(
+    publishableResults.some(
       (r) =>
         !isConcurrent(r.metrics) &&
         decodeOf(r.metrics) != null &&
@@ -469,7 +478,7 @@ function buildRunDetail(
     passCount,
     failCount,
     issueCount,
-    modelCount: byModel.size,
+    modelCount: models.length,
     nodeCount,
     topologyLabel: fp?.cluster?.topology_label ?? null,
     skulkVersion: fp?.runtime?.skulk_version ?? null,
@@ -492,7 +501,7 @@ function buildRunDetail(
     models,
     issues: [
       ...(report.issues ?? []),
-      ...results.flatMap((r) => r.issues ?? []),
+      ...publishableResults.flatMap((r) => r.issues ?? []),
     ].map((i) => ({ severity: i.severity ?? 'info', message: i.message ?? '' })),
   };
 }
@@ -785,6 +794,7 @@ export function runImport({ runs, community, out, redact }: ImportOptions): stri
 
   const details: RunDetail[] = [];
   const seen = new Set<string>();
+  let omittedWithoutCompleteHardware = 0;
   for (const runsDir of runs) {
     for (const file of collectReportFiles(runsDir)) {
       const report = loadReportFile(file);
@@ -792,7 +802,12 @@ export function runImport({ runs, community, out, redact }: ImportOptions): stri
       // De-dup by run_id: the same run may exist both locally and in the store.
       if (seen.has(report.run_id)) continue;
       seen.add(report.run_id);
-      details.push(buildRunDetail(report, redact));
+      const detail = buildRunDetail(report, redact);
+      if (!detail.hardware.known) {
+        omittedWithoutCompleteHardware += 1;
+        continue;
+      }
+      details.push(detail);
     }
   }
   // Community submissions import AFTER first-party sources so a run id that
@@ -809,7 +824,12 @@ export function runImport({ runs, community, out, redact }: ImportOptions): stri
       if (!report || seen.has(report.run_id)) continue;
       seen.add(report.run_id);
       const submitter = manifest[report.run_id]?.submitter ?? 'unknown';
-      details.push(buildRunDetail(report, redact, 'community', submitter));
+      const detail = buildRunDetail(report, redact, 'community', submitter);
+      if (!detail.hardware.known) {
+        omittedWithoutCompleteHardware += 1;
+        continue;
+      }
+      details.push(detail);
     }
   }
   details.sort((a, b) => (b.startedAt ?? '').localeCompare(a.startedAt ?? ''));
@@ -826,7 +846,7 @@ export function runImport({ runs, community, out, redact }: ImportOptions): stri
   const hardwareLabels = [
     ...new Set(
       histories.flatMap((h) =>
-        h.hardwareCells.filter((c) => c.classes.some((x) => x !== 'unknown')).map((c) => c.label),
+        h.hardwareCells.filter((c) => hasFullyKnownHardware(c.classes)).map((c) => c.label),
       ),
     ),
   ].sort();
@@ -856,6 +876,7 @@ export function runImport({ runs, community, out, redact }: ImportOptions): stri
 
   return (
     `Imported ${details.length} run(s), ${histories.length} model(s), ${suites.length} suite(s)` +
+    `; omitted ${omittedWithoutCompleteHardware} run(s) without complete hardware` +
     `${redact ? ' [redacted]' : ''} -> ${out}`
   );
 }

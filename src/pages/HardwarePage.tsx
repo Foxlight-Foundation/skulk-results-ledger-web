@@ -7,9 +7,10 @@ import { Eyebrow, Muted, Page, Row } from '../components/primitives';
 import { ErrorState, LoadingState } from '../components/States';
 import type { ModelRollup } from '../data/schema';
 import { formatTps } from '../data/format';
+import { hasFullyKnownHardware } from '../data/hardware';
 import { useIndex } from '../data/useLedger';
 import { useWindow } from '../data/useWindow';
-import { isWithinWindow, windowRollup } from '../data/window';
+import { windowRollup } from '../data/window';
 
 const Title = styled.h1`
   font-size: ${({ theme }) => theme.typography.fontSize.sectionH};
@@ -108,14 +109,14 @@ export function HardwarePage() {
     const coverage = new Map<string, number>();
     for (const m of windowed) {
       for (const c of m.hardwareCells) {
-        if (c.classes.some((x) => x !== 'unknown')) {
+        if (hasFullyKnownHardware(c.classes)) {
           coverage.set(c.label, (coverage.get(c.label) ?? 0) + 1);
         }
       }
     }
     const labels = [...coverage.entries()].sort((a, b) => b[1] - a[1]).map(([l]) => l);
     const rows = windowed.filter((m) =>
-      m.hardwareCells.some((c) => c.classes.some((x) => x !== 'unknown')),
+      m.hardwareCells.some((c) => hasFullyKnownHardware(c.classes)),
     );
     return { labels, rows };
   }, [data, window, now]);
@@ -123,10 +124,6 @@ export function HardwarePage() {
   if (loading) return <LoadingState />;
   if (error) return <ErrorState error={error} />;
   if (!data) return <ErrorState error="No index." />;
-
-  const unknownRuns = data.runs.filter(
-    (r) => !r.hardware.known && isWithinWindow(r.finishedAt ?? r.startedAt, window, now),
-  ).length;
 
   return (
     <Page>
@@ -194,14 +191,8 @@ export function HardwarePage() {
         served the model, so the shape shown is the whole cluster (an upper bound), not
         verified placement. Hardware classes are vendor + memory tier, derived from each run&apos;s fingerprint;
         chip-level classes (M4 vs M5, specific GPUs) arrive as newer runs record accelerator
-        names. {unknownRuns > 0 ? (
-          <>
-            <Muted>
-              {unknownRuns} of {data.runCount} runs predate hardware fingerprints and are excluded
-              here; they remain in every other view as &quot;unknown hardware&quot;.
-            </Muted>
-          </>
-        ) : null}
+        names. Reports with incomplete hardware profiles remain archived but are omitted from every
+        dashboard view and aggregate.
       </FootNote>
     </Page>
   );
