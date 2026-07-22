@@ -120,7 +120,7 @@ export function ConcurrencyChart({ curve }: { curve: ConcurrencyCurve }) {
         <ChartTitle>Throughput vs concurrency</ChartTitle>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <ChartHint>
-            {curve.hardwareLabel} · {formatDate(curve.startedAt)}
+            {curve.hardware.label} · {curve.resolvedBackends.join(', ') || 'backend unrecorded'} · {formatDate(curve.startedAt)}
           </ChartHint>
           <ChartToggleGroup role="group" aria-label="chart style">
             <ChartToggleButton

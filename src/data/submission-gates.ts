@@ -8,13 +8,9 @@
  *
  * Philosophy: structural problems REJECT (no run id, no results, no
  * fingerprint nodes: the ledger cannot say anything honest about such a
- * run); plausibility problems only WARN (the ledger's job is to show
- * suspicious numbers with their asterisks, and moderation sees the warnings
- * before approving).
+ * run). Statistically unusual performance is not a structural defect; source,
+ * formula, and provenance remain visible for moderation and audit instead.
  */
-
-/** Physical-plausibility ceiling shared with the importer's credibility bar. */
-export const IMPLAUSIBLE_TPS = 1000;
 
 /** Hard cap on results per submission (a battery cell is tens, not thousands). */
 export const MAX_RESULTS = 2000;
@@ -90,20 +86,6 @@ export function validateSubmission(report: unknown): GateResult {
         !(n as { node_id: string }).node_id,
     ).length;
     if (bad > 0) errors.push(`${bad} node entr(ies) missing a string node_id`);
-  }
-
-  // Plausibility: warn, never reject; moderation and the site's caveat
-  // machinery are the honest home for suspicious numbers.
-  if (results) {
-    let implausible = 0;
-    for (const item of results) {
-      const metrics = (item as { metrics?: Record<string, unknown> }).metrics;
-      const tps = metrics?.skulk_generation_tps ?? metrics?.wall_tps;
-      if (typeof tps === 'number' && tps > IMPLAUSIBLE_TPS) implausible += 1;
-    }
-    if (implausible > 0) {
-      warnings.push(`${implausible} result(s) above the ${IMPLAUSIBLE_TPS} tok/s plausibility ceiling`);
-    }
   }
 
   return { ok: errors.length === 0, errors, warnings };
