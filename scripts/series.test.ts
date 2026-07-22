@@ -6,6 +6,7 @@ import {
   chooseDefaultContext,
   contextFromSearch,
   joinRunSeries,
+  pointsInWindow,
   summarizePoints,
 } from '../src/data/series.ts';
 import { windowFromParam } from '../src/data/window.ts';
@@ -146,6 +147,16 @@ test('window URL parsing restores supported values and defaults safely', () => {
   assert.equal(windowFromParam('7'), 7);
   assert.equal(windowFromParam('all'), null);
   assert.equal(windowFromParam('bogus'), 30);
+});
+
+test('trend populations omit run points outside the active window', () => {
+  const now = Date.UTC(2026, 6, 21);
+  const visible = pointsInWindow(
+    [point(1, 40, 1), point(2, 42, 15), point(3, 44, 21)],
+    7,
+    now,
+  );
+  assert.deepEqual(visible.map((item) => item.runId), ['run-2', 'run-3']);
 });
 
 test('benchmark context restoration gives URL state precedence over session state', () => {

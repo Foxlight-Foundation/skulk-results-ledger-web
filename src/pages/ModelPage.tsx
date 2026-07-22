@@ -10,7 +10,7 @@ import { SortableTable, type Column } from '../components/SortableTable';
 import { EmptyState, ErrorState, LoadingState } from '../components/States';
 import type { MetricSource, ProvenanceTier } from '../data/schema';
 import { formatDate, formatPercent, formatSeconds, formatTps } from '../data/format';
-import { chooseDefaultContext, matchesContext, pointsInWindow, summarizeSeries } from '../data/series';
+import { chooseDefaultContext, matchesContext, pointsInWindow, summarizePoints } from '../data/series';
 import { useModelHistory } from '../data/useLedger';
 import { useWindow } from '../data/useWindow';
 import { isWithinWindow } from '../data/window';
@@ -49,7 +49,13 @@ export function ModelPage() {
   const exactRows: TrendSeriesRow[] = data.series
     .filter((item) => item.tier === tier && item.comparable && matchesContext(item, context))
     .filter((item) => hardware === 'all' || item.seriesId === hardware)
-    .map((series) => ({ series, summary: summarizeSeries(series, window, now) }))
+    .map((series) => {
+      const points = pointsInWindow(series.points, window, now);
+      return {
+        series: { ...series, points },
+        summary: summarizePoints(points, series.comparable),
+      };
+    })
     .filter((row) => row.summary.runCount > 0);
   const legacy = data.series
     .filter((item) => item.tier === tier && !item.comparable && item.suiteId === suiteId && item.testName === testName && item.source === source)
