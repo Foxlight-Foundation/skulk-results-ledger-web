@@ -1,0 +1,36 @@
+[
+  {
+    "run_id": "20260713-035748-gguf-big-llama-cpp",
+    "started_at": "2026-07-13T08:57:48.340551Z",
+    "spec": { "model_set": "gguf-big", "test_set": "llama-cpp", "mode": "execute" },
+    "placements": [{ "model_id": "Qwen/Qwen2.5-7B-Instruct-GGUF", "node_ids": ["node-amd"], "instance_meta": "MlxRingInstance" }],
+    "results": [
+      { "model_id": "Qwen/Qwen2.5-7B-Instruct-GGUF", "test_name": "ordered-integers-coherence", "repetition": 1, "passed": true, "tool_calls": [], "metrics": { "elapsed_s": 1.2741537922993302, "ttft_s": 0.17901941714808345, "chunks": 50, "approx_output_tokens": 12, "wall_tps": 10.957559430405702, "skulk_generation_tps": 47.52385263823044, "skulk_generation_tokens": 51 } },
+      { "model_id": "Qwen/Qwen2.5-7B-Instruct-GGUF", "test_name": "tool-call-path", "repetition": 1, "passed": true, "tool_calls": [], "metrics": { "elapsed_s": 0.7256450839340687, "ttft_s": 0.7255105841904879, "chunks": 1, "approx_output_tokens": 22, "wall_tps": 163569.0850724979, "skulk_generation_tps": 32.56037224711063, "skulk_generation_tokens": 22 } },
+      { "model_id": "Qwen/Qwen2.5-7B-Instruct-GGUF", "test_name": "harmony-marker-leak-guard", "repetition": 1, "passed": true, "tool_calls": [], "metrics": { "elapsed_s": 0.7079025004059076, "ttft_s": 0.21821291698142886, "chunks": 22, "approx_output_tokens": 34, "wall_tps": 69.43174033278895, "skulk_generation_tps": 49.37106776073839, "skulk_generation_tokens": 23 } }
+    ],
+    "fingerprint": { "runtime": { "skulk_version": "1.4.2", "skulk_commit": "48fd22db" }, "cluster": { "node_count": 1, "nodes": [{ "node_id": "node-amd", "ram_total_bytes": 65957408768, "accelerator_vendor": "amd", "accelerator_name": "AMD GPU", "skulk_version": "1.4.2" }] } }
+  },
+  {
+    "run_id": "20260717-152536-gguf-big-llama-cpp",
+    "started_at": "2026-07-17T20:25:36.000000Z",
+    "spec": { "model_set": "gguf-big", "test_set": "llama-cpp", "mode": "execute" },
+    "placements": [{ "model_id": "Qwen/Qwen2.5-7B-Instruct-GGUF", "node_ids": ["node-amd"], "instance_meta": "MlxRingInstance" }],
+    "results": [
+      { "model_id": "Qwen/Qwen2.5-7B-Instruct-GGUF", "test_name": "ordered-integers-coherence", "repetition": 1, "passed": true, "tool_calls": [], "metrics": { "elapsed_s": 1.2609237497672439, "ttft_s": 0.1967295417562127, "chunks": 50, "approx_output_tokens": 12, "wall_tps": 11.276137296807775, "skulk_generation_tps": 47.98360654195319, "skulk_generation_tokens": 51 } },
+      { "model_id": "Qwen/Qwen2.5-7B-Instruct-GGUF", "test_name": "tool-call-path", "repetition": 1, "passed": true, "tool_calls": [{ "name": "get_weather" }], "metrics": { "elapsed_s": 0.8825879171490669, "ttft_s": 0.8791312919929624, "chunks": 0, "approx_output_tokens": 0, "wall_tps": 0, "skulk_generation_tps": 45.471572688474254, "skulk_generation_tokens": 21 } }
+    ],
+    "fingerprint": { "runtime": { "skulk_version": "1.4.2", "skulk_commit": "48fd22db" }, "cluster": { "node_count": 1, "nodes": [{ "node_id": "node-amd", "ram_total_bytes": 65957408768, "accelerator_vendor": "amd", "accelerator_name": "AMD GPU", "skulk_version": "1.4.2" }] } }
+  },
+  {
+    "run_id": "20260721-040616-gguf-big-llama-cpp",
+    "started_at": "2026-07-21T09:06:16.000000Z",
+    "spec": { "model_set": "gguf-big", "test_set": "llama-cpp", "mode": "execute" },
+    "placements": [{ "model_id": "Qwen/Qwen2.5-7B-Instruct-GGUF", "node_ids": ["node-amd"], "instance_meta": "MlxRingInstance" }],
+    "results": [
+      { "model_id": "Qwen/Qwen2.5-7B-Instruct-GGUF", "test_name": "ordered-integers-coherence", "repetition": 1, "passed": true, "tool_calls": [], "metrics": { "elapsed_s": 1.2532943752594292, "ttft_s": 0.19612241722643375, "chunks": 50, "approx_output_tokens": 12, "wall_tps": 11.351038881439445, "skulk_generation_tps": 49.165452686448425, "skulk_generation_tokens": 51 } },
+      { "model_id": "Qwen/Qwen2.5-7B-Instruct-GGUF", "test_name": "tool-call-path", "repetition": 1, "passed": true, "tool_calls": [{ "name": "get_weather" }], "metrics": { "elapsed_s": 0.7909143338911235, "ttft_s": 0.7870435835793614, "chunks": 0, "approx_output_tokens": 0, "wall_tps": 0, "skulk_generation_tps": 28.38233729307298, "skulk_generation_tokens": 21 } }
+    ],
+    "fingerprint": { "runtime": { "skulk_version": "1.4.2", "skulk_commit": "48fd22db" }, "cluster": { "node_count": 1, "nodes": [{ "node_id": "node-amd", "ram_total_bytes": 65957408768, "accelerator_vendor": "amd", "accelerator_name": "AMD GPU", "skulk_version": "1.4.2" }] } }
+  }
+]

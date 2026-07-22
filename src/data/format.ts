@@ -4,22 +4,6 @@ import type { Caveat, EngineFamily } from './schema';
 
 /** Human metadata for each caveat, so a chip explains itself on hover. */
 export const CAVEAT_META: Record<Caveat, { label: string; tone: 'warn' | 'fail' | 'neutral'; description: string }> = {
-  low_sample: {
-    label: 'low n',
-    tone: 'warn',
-    description: 'Fewer than 3 timed samples. Treat the number as indicative, not measured.',
-  },
-  single_rep: {
-    label: 'single rep',
-    tone: 'neutral',
-    description: 'Only one repetition of each test. No within-run variance is captured.',
-  },
-  short_output_dominant: {
-    label: 'short outputs',
-    tone: 'warn',
-    description:
-      'Most outputs were too short to time throughput honestly (a 5-token answer yields a meaningless tok/s). Excluded from the median but flagged here.',
-  },
   issue_marked: {
     label: 'has issues',
     tone: 'warn',
@@ -31,11 +15,11 @@ export const CAVEAT_META: Record<Caveat, { label: string; tone: 'warn' | 'fail' 
     description:
       'This run predates runtime fingerprints, so its exact Skulk version, node set, and cache state are not recorded.',
   },
-  decode_tps_estimated: {
-    label: 'throughput estimate',
+  legacy_provenance: {
+    label: 'legacy',
     tone: 'neutral',
     description:
-      "This run couldn't measure a decode window (output tokens over wall minus TTFT) for at least one result -- missing output tokens, a missing or unusable TTFT, or no wall throughput -- so its decode rate falls back to raw whole-request throughput, which folds in prompt/TTFT time.",
+      'At least one observation lacks protocol, exact placement hardware, backend, or placement shape and is not comparison- or stability-eligible.',
   },
   has_failures: {
     label: 'failures',
