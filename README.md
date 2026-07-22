@@ -6,12 +6,13 @@ produced by `skulk-test-harness` as an interactive site: a speed-vs-latency
 model explorer, per-model throughput history, a full run audit trail, suite
 coverage, and an in-browser run-vs-run comparison.
 
-It is a **ledger, not a leaderboard**. Failed and excluded observations remain
-visible on run detail, while text trends accept only passed, structurally valid
-chat/code/artifact measurements. Reports with missing or partially unknown
-hardware remain in the durable results store but are omitted dashboard-wide.
-Every throughput row belongs to an explicit test, protocol, metric source,
-exact hardware, backend, placement, tier, and time context.
+It is a **ledger, not a leaderboard**. Failed, partial, single-rep, and
+short-output runs with classifiable hardware are all kept and shown with their
+caveats. Reports with missing or partially unknown hardware remain in the
+durable results store but are omitted from the public dashboard and its
+aggregates. Throughput headlines are the median of *credible* samples only (multi-rep, not
+short-output-dominated, physically plausible), so a five-token answer can never
+become a record.
 
 ## No backend
 
@@ -78,39 +79,19 @@ npm run publish -- --data ../skulk-results-data --push
 
 **Deploy** is a GitHub Action (`.github/workflows/deploy.yml`): on push to
 `main` (and every 6h, to pick up newly published runs), it checks out the data
-repo, imports with `--redact`, builds with `DEPLOY_BASE=/`, and publishes to
-Cloudflare Pages at `benchmarks.foxlight.ai`.
+repo, imports with `--redact`, builds with `DEPLOY_BASE=/benchmarks/`, and
+publishes to GitHub Pages. A `404.html` fallback (created by `postbuild`) makes
+deep links work on Pages.
+
+One-time setup (see `DEPLOY.md`): make this repo's Pages source "GitHub Actions",
+add a `DATA_REPO_TOKEN` secret with read access to `skulk-results-data`, and set
+the repo/plan so Pages can serve it.
 
 ## Data contract
 
 `src/data/schema.ts` is the single source of truth for the generated-data
 shapes, shared by the importer (`scripts/import-runs.ts`) and the app. The
 ledger schema version is independent of the harness report schema.
-
-Schema 2.0 retains every repetition on run detail as a
-`PerformanceObservation`, then computes one `RunSeriesPoint` median from valid
-repetitions of the same test and exact series identity. A `PerformanceSeries`
-never crosses model, tier, suite, test, protocol, metric source, exact hardware,
-hardware attribution, backend, instance type, or sharding boundaries.
-
-Text decode trends accept only chat, code, and artifact flows. Their sources
-remain separate:
-
-- `client_exact`: exact generated tokens divided by the measurable streamed
-  decode interval; at least 20 exact tokens and two generated chunks.
-- `engine_reported`: the engine diagnostic rate, labeled as such.
-- `client_approx`: the legacy character-derived rate, validated against its
-  own approximate token count.
-
-Failed results and invalid measurements remain on run detail. Missing protocol,
-backend, exact placement hardware, or placement shape produces a neutral legacy
-observation that cannot enter comparison, headlines, or stability. Unknown or
-partially known hardware is omitted from all public dashboard views.
-
-`Stable` requires the newest ten distinct run-level points in the selected time
-window to span at least seven days and have sample CV at most 10%. Enough
-longitudinal evidence above that threshold is `Variable`; fewer comparable runs
-are `Observed`; incomplete provenance is `Legacy`.
 
 ## Checks
 

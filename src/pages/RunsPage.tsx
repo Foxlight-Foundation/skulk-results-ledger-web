@@ -154,10 +154,8 @@ export function RunsPage() {
       <Eyebrow>Audit trail</Eyebrow>
       <Title>Every run</Title>
       <Sub>
-        Reverse-chronological audit of every hardware-attributed dashboard run;
-        failed, partial, and issue-marked results remain included. Reports with
-        unknown or partially known hardware stay in the durable archive and do
-        not appear here. {data.runCount} runs are in the current data set.
+        Reverse-chronological, unfiltered; Failed, partial, and issue-marked runs included.{' '}
+        {data.runCount} runs in the current data set.
       </Sub>
       <Search placeholder="Filter by run id, suite, or model set…" value={query} onChange={(e) => setQuery(e.target.value)} />
       {rows.length === 0 ? (
