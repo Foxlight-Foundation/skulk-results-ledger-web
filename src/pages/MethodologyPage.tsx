@@ -1,20 +1,131 @@
 import styled from 'styled-components';
 
+import { CaveatChip } from '../components/Chip';
 import { Eyebrow, Page, Panel } from '../components/primitives';
+import type { Caveat } from '../data/schema';
+import { CAVEAT_META } from '../data/format';
 
-const Title=styled.h1`font-size:${({theme})=>theme.typography.fontSize.sectionH};max-width:20ch;`;
-const Lead=styled.p`color:${({theme})=>theme.colors.text2};font-size:${({theme})=>theme.typography.fontSize.lg};max-width:68ch;margin:14px 0 28px;`;
-const H2=styled.h2`font-size:${({theme})=>theme.typography.fontSize.xl};margin:28px 0 8px;`;
-const P=styled.p`color:${({theme})=>theme.colors.text2};max-width:72ch;line-height:1.65;margin-bottom:14px;`;
-const Formula=styled(Panel)`padding:14px;margin:12px 0;max-width:72ch;font-family:${({theme})=>theme.typography.fontFamily.mono};color:${({theme})=>theme.colors.text1};`;
+const Title = styled.h1`
+  font-size: ${({ theme }) => theme.typography.fontSize.sectionH};
+  letter-spacing: ${({ theme }) => theme.typography.letterSpacing.section};
+  max-width: 20ch;
+`;
 
-export function MethodologyPage(){return <Page>
-  <Eyebrow>How to read this</Eyebrow><Title>Observation methodology</Title><Lead>A performance number is meaningful only inside its exact test, protocol, hardware, backend, placement, source, and provenance series. The ledger never averages or connects different series.</Lead>
-  <H2>Three decode sources</H2><P><strong>Client exact</strong> is the primary measurement. It divides Skulk&apos;s exact generated-token count by the client-observed streamed decode interval. It requires at least 20 exact generated tokens, at least two generated chunks, and a finite positive interval.</P><Formula>observed_decode_tps = skulk_generation_tokens / decode_elapsed_s</Formula><P><strong>Engine reported</strong> is the serving engine&apos;s diagnostic generation rate. <strong>Client approximate</strong> is the legacy character-derived token estimate divided by the client interval after TTFT. They remain selectable, separately labeled series and never silently replace client exact. Approximate eligibility uses its own approximate token count.</P>
-  <H2>Run points and longitudinal status</H2><P>One test repetition is one observation. Valid repetitions for the same exact series are reduced to one median per run; different test cases never count as repetitions. Failed results remain on run detail but do not feed points, trends, comparisons, or summaries. TTFT is validated independently and can remain useful when output is too short for TPS.</P><P><strong>Stable</strong> means the newest ten distinct run-level points in the selected window span at least seven days and have sample CV at or below 10%. <strong>Variable</strong> means that evidence exists but CV exceeds 10%. <strong>Observed</strong> means valid data exists but there is not yet enough longitudinal evidence. <strong>Legacy</strong> means protocol, exact placement hardware, backend, or placement shape is incomplete; those points are neutral, unconnected, and stability-ineligible.</P>
-  <H2>Series boundaries</H2><P>Model, tier, suite, test, protocol, metric source, exact hardware profile, attribution, backend set, instance type, sharding, and shard types define a series. Skulk version and commit annotate points inside the series so code-change regressions stay visible. A backend change starts another series.</P>
-  <H2>Workload boundaries</H2><P>Ordinary text decode series accept only chat, code, and artifact flows. Tool calling, cancellation, expected errors, concurrency, speech, embedding, vision, and other specialized workloads remain auditable in run and suite coverage, but cannot enter text TPS or TTFT trends. Concurrency remains its own metric family grouped by protocol family, exact hardware, backend, and placement.</P>
-  <H2>Legacy migration</H2><P>For older reports, exact client TPS is reconstructed per test from matching exact tokens and <code>elapsed_s - ttft_s</code>. Missing test kind is recognized as legacy text only when safe streaming evidence exists; specialized labels and tool-call evidence are excluded. Old reports cannot become Stable because they do not record protocol and backend provenance.</P>
-  <H2>Hardware and provenance</H2><P>Hardware profiles require complete accelerator and memory facts. Unknown or partially known hardware stays in the durable report archive but is omitted dashboard-wide. Whole-cluster attribution is retained as Legacy history when the cluster hardware is known, but it is excluded from headline comparison and stability. Foxlight and community tiers remain separate.</P>
-  <H2>No plausibility ceiling</H2><P>The ledger rejects structurally invalid measurements—missing inputs, non-finite or non-positive values, short outputs, and missing streamed intervals. It does not reject a result merely because it is statistically unusual or above a fleet-wide TPS ceiling.</P>
-</Page>}
+const Lead = styled.p`
+  color: ${({ theme }) => theme.colors.text2};
+  font-size: ${({ theme }) => theme.typography.fontSize.lg};
+  max-width: 64ch;
+  margin: ${({ theme }) => theme.spacing.md} 0 ${({ theme }) => theme.spacing.xl};
+`;
+
+const H2 = styled.h2`
+  font-size: ${({ theme }) => theme.typography.fontSize.xl};
+  margin: ${({ theme }) => theme.spacing.xl} 0 ${({ theme }) => theme.spacing.sm};
+`;
+
+const P = styled.p`
+  color: ${({ theme }) => theme.colors.text2};
+  max-width: 68ch;
+  line-height: ${({ theme }) => theme.typography.lineHeight.relaxed};
+  margin-bottom: ${({ theme }) => theme.spacing.md};
+`;
+
+const CaveatCard = styled(Panel)`
+  padding: ${({ theme }) => theme.spacing.md};
+  display: flex;
+  gap: ${({ theme }) => theme.spacing.md};
+  align-items: flex-start;
+  margin-bottom: ${({ theme }) => theme.spacing.sm};
+`;
+
+const CaveatDesc = styled.div`
+  color: ${({ theme }) => theme.colors.text3};
+  font-size: ${({ theme }) => theme.typography.fontSize.sm};
+`;
+
+const ALL_CAVEATS = Object.keys(CAVEAT_META) as Caveat[];
+
+export function MethodologyPage() {
+  return (
+    <Page>
+      <Eyebrow>How to read this</Eyebrow>
+      <Title>Methodology</Title>
+      <Lead>
+        These numbers come from the Skulk test harness running chat, code, and tool workloads
+        against real hardware. Every hardware-attributed run is included.
+      </Lead>
+
+      <H2>How throughput is computed</H2>
+      <P>
+        The headline "typical decode tok/s" for a model is the median across that model's{' '}
+        <strong>credible</strong> per-run medians. A run is credible when it has at least three timed
+        samples and is not dominated by short outputs. A five-token answer can finish in a moment and
+        report a nonsensical four-hundred tokens per second; those samples are excluded from every
+        median and counted separately, so they can never set a record.
+      </P>
+      <P>
+        When Skulk reports a native decode rate we use it. When it does not (some engines only expose
+        a wall-clock figure that folds in prompt time) we fall back to wall throughput and mark the
+        number as an estimate. We never silently mix the two.
+      </P>
+      <P>
+        We also apply a physical-plausibility ceiling. Implausible tokens-per-second, invalid text
+        generation, etc. are excluded from headline numbers and are shown dimmed in the history
+        rather than deleted.
+      </P>
+
+      <H2>Why comparisons carry warnings</H2>
+      <P>
+        A faster number on a different node set, a warmer cache, or a newer Skulk version is not a
+        real speedup. The compare view surfaces those differences as guards instead of hiding them.
+      </P>
+
+      <H2>The caveat vocabulary</H2>
+      <P>Every chip on the site means exactly one of these:</P>
+      {ALL_CAVEATS.map((c) => (
+        <CaveatCard key={c}>
+          <CaveatChip caveat={c} />
+          <CaveatDesc>{CAVEAT_META[c].description}</CaveatDesc>
+        </CaveatCard>
+      ))}
+
+      <H2>Community submissions</H2>
+      <P>
+        Operators running skulk-test-harness against their own clusters can submit results.
+        Submissions authenticate with a GitHub account, pass the same structural and plausibility
+        gates as first-party data, and wait for manual approval before appearing. Community runs
+        are always badged with their submitter and never blend into headline numbers: typical
+        throughput and the hardware matrix rest on first-party runs only. Submit by POSTing a
+        harness report to the ingest API; a first-class harness command is on the way.
+      </P>
+
+      <H2>How hardware is classified</H2>
+      <P>
+        Each run&apos;s fingerprint records raw facts per node (accelerator vendor, memory, and on
+        GPU nodes the VRAM and GTT sizes). At import those map to canonical classes: vendor plus
+        the nearest standard memory tier of the node&apos;s unified capacity. On a unified-memory
+        APU (an AMD Strix) the OS-visible RAM is only the slice left after the BIOS carves a VRAM
+        region from the same physical memory, so the carve is added back before tiering -- a 128GB
+        box reporting 61GiB usable plus a 64GB carve reads as AMD 128GB. The carve is applied when
+        the node&apos;s GTT aperture shows the GPU addresses system RAM (any tier), or as a
+        fleet-calibrated estimate for older first-party fingerprints; an untrusted AMD node with
+        no such signal keeps its plain RAM reading. A run&apos;s hardware is the multiset of
+        its node classes; a model&apos;s hardware is the classes of the nodes that actually served
+        it where the run recorded placement (marked exact), or the whole-cluster shape otherwise
+        (marked cluster). Reports whose hardware profile is missing or only partially classifiable
+        remain in the durable archive but are omitted from every dashboard view and aggregate; a
+        measurement is not presented without the complete hardware context needed to interpret it.
+        Classification lives in the site importer, not the harness, so a taxonomy fix reclassifies
+        all history on the next rebuild.
+      </P>
+
+      <H2>Where the data comes from</H2>
+      <P>
+        Each run is a set of harness artifacts (a machine-readable report, an event log, a summary).
+        This site is a static view generated from those artifacts. There is no database and no live
+        API: the numbers you see were fixed at import time, and every row links back to the run that
+        produced it.
+      </P>
+    </Page>
+  );
+}

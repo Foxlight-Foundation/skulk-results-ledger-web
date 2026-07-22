@@ -1,225 +1,379 @@
-import { useEffect, useMemo } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 
-import { FamilyBadge, SeriesStatusChip } from '../components/Chip';
-import { SpeedScatter, type ExplorerSeriesRow } from '../components/charts/SpeedScatter';
+import { CaveatList, FamilyBadge, PassRateChip } from '../components/Chip';
+import { SpeedScatter } from '../components/charts/SpeedScatter';
 import { Eyebrow, Muted, Page, Panel, Row } from '../components/primitives';
 import { SortableTable, type Column } from '../components/SortableTable';
 import { EmptyState, ErrorState, LoadingState } from '../components/States';
-import type { EngineFamily, MetricSource, ProvenanceTier } from '../data/schema';
-import { FAMILY_META, formatPercent, formatSeconds, formatTps } from '../data/format';
-import {
-  chooseDefaultContext,
-  contextFromSearch,
-  matchesContext,
-  summarizeSeries,
-  type SeriesContext,
-} from '../data/series';
+import type { Caveat, EngineFamily, ModelRollup } from '../data/schema';
+import { FAMILY_META, formatSeconds, formatTps } from '../data/format';
 import { useIndex } from '../data/useLedger';
 import { useWindow } from '../data/useWindow';
+import { isWithinWindow, windowRollup } from '../data/window';
 
 const Hero = styled.header`
   padding: ${({ theme }) => `${theme.spacing.xl} 0 ${theme.spacing.lg}`};
 `;
+
 const Title = styled.h1`
   font-size: ${({ theme }) => theme.typography.fontSize.hero};
   letter-spacing: ${({ theme }) => theme.typography.letterSpacing.tight};
   line-height: ${({ theme }) => theme.typography.lineHeight.display};
+  max-width: 16ch;
 `;
+
 const Sub = styled.p`
   color: ${({ theme }) => theme.colors.text2};
   font-size: ${({ theme }) => theme.typography.fontSize.lg};
-  max-width: 68ch;
+  max-width: 62ch;
   margin-top: ${({ theme }) => theme.spacing.md};
 `;
-const Controls = styled(Panel)`
+
+const Stats = styled.div`
   display: grid;
-  grid-template-columns: repeat(4, minmax(150px, 1fr));
-  gap: ${({ theme }) => theme.spacing.sm};
-  padding: ${({ theme }) => theme.spacing.md};
-  margin: ${({ theme }) => `${theme.spacing.lg} 0`};
-  @media (max-width: ${({ theme }) => theme.breakpoints.md}) {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: ${({ theme }) => theme.spacing.md};
+  margin: ${({ theme }) => theme.spacing.lg} 0 ${({ theme }) => theme.spacing.xl};
   @media (max-width: ${({ theme }) => theme.breakpoints.sm}) {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
   }
 `;
-const Control = styled.label`
-  display: grid;
-  gap: 5px;
-  color: ${({ theme }) => theme.colors.text3};
+
+const Stat = styled(Panel)`
+  padding: ${({ theme }) => theme.spacing.md};
+`;
+
+const StatNum = styled.div`
+  font-family: ${({ theme }) => theme.typography.fontFamily.display};
+  font-size: 1.9rem;
+  color: ${({ theme }) => theme.colors.text1};
+`;
+
+const StatLabel = styled.div`
   font-family: ${({ theme }) => theme.typography.fontFamily.mono};
   font-size: ${({ theme }) => theme.typography.fontSize.eyebrow};
   text-transform: uppercase;
-`;
-const controlCss = `
-  width: 100%;
-  border: 1px solid rgba(240,237,232,.14);
-  border-radius: 8px;
-  padding: 9px 10px;
-  background: #0b1124;
-  color: #f0ede8;
-  font: inherit;
-  text-transform: none;
-`;
-const Select = styled.select`${controlCss}`;
-const Search = styled.input`${controlCss}`;
-const Section = styled.h2`
-  font-size: ${({ theme }) => theme.typography.fontSize.xl};
-  margin: ${({ theme }) => `${theme.spacing.xl} 0 ${theme.spacing.md}`};
-`;
-const Coverage = styled(Panel)`
-  padding: ${({ theme }) => theme.spacing.md};
+  letter-spacing: ${({ theme }) => theme.typography.letterSpacing.eyebrow};
+  color: ${({ theme }) => theme.colors.text3};
+  margin-top: 4px;
 `;
 
-const CONTEXT_STORAGE = 'skulk-ledger-series-context';
+const Controls = styled(Row)`
+  margin: ${({ theme }) => theme.spacing.xl} 0 ${({ theme }) => theme.spacing.md};
+  flex-wrap: wrap;
+`;
 
-function sessionContext(): Partial<SeriesContext> {
-  try {
-    return JSON.parse(sessionStorage.getItem(CONTEXT_STORAGE) ?? '{}') as Partial<SeriesContext>;
-  } catch {
-    return {};
+const Search = styled.input`
+  flex: 1;
+  min-width: 200px;
+  background: ${({ theme }) => theme.colors.dusk};
+  border: 1px solid ${({ theme }) => theme.colors.border1};
+  border-radius: ${({ theme }) => theme.radii.pill};
+  padding: 10px 16px;
+  color: ${({ theme }) => theme.colors.text1};
+  font-family: ${({ theme }) => theme.typography.fontFamily.body};
+  font-size: ${({ theme }) => theme.typography.fontSize.sm};
+  &::placeholder {
+    color: ${({ theme }) => theme.colors.text4};
   }
-}
+  &:focus {
+    outline: none;
+    border-color: ${({ theme }) => theme.colors.borderAmber};
+  }
+`;
 
-function setParam(
-  params: globalThis.URLSearchParams,
-  update: (next: globalThis.URLSearchParams) => void,
-  key: string,
-  value: string,
-): void {
-  const next = new globalThis.URLSearchParams(params);
-  next.set(key, value);
-  update(next);
-}
+const FilterBtn = styled.button<{ $active?: boolean }>`
+  border-radius: ${({ theme }) => theme.radii.pill};
+  padding: 8px 15px;
+  font-size: ${({ theme }) => theme.typography.fontSize.sm};
+  cursor: pointer;
+  border: 1px solid ${({ theme, $active }) => ($active ? theme.colors.borderAmber : theme.colors.border1)};
+  background: ${({ theme, $active }) => ($active ? theme.colors.amberWash : 'transparent')};
+  color: ${({ theme, $active }) => ($active ? theme.colors.amberHi : theme.colors.text2)};
+  transition: all 130ms ease;
+  &:hover {
+    border-color: ${({ theme }) => theme.colors.border2};
+    color: ${({ theme }) => theme.colors.text1};
+  }
+`;
+
+const SectionLabel = styled.h2`
+  font-size: ${({ theme }) => theme.typography.fontSize.xl};
+  margin: ${({ theme }) => theme.spacing.xl} 0 ${({ theme }) => theme.spacing.md};
+`;
+
+const HiddenNote = styled.p`
+  margin: 0 0 ${({ theme }) => theme.spacing.md};
+  font-family: ${({ theme }) => theme.typography.fontFamily.mono};
+  font-size: ${({ theme }) => theme.typography.fontSize.eyebrow};
+  /* Deliberate full-opacity white, overriding the theme's warm-cream text
+     ceiling: the muted token was illegible against the starfield background
+     and this note must always read. */
+  color: #ffffff;
+`;
+
+const FAMILIES: (EngineFamily | 'all')[] = ['all', 'mlx', 'llama_cpp'];
+
+const HardwareSelect = styled.select`
+  background: ${({ theme }) => theme.colors.dusk};
+  border: 1px solid ${({ theme }) => theme.colors.border1};
+  border-radius: ${({ theme }) => theme.radii.pill};
+  padding: 9px 14px;
+  color: ${({ theme }) => theme.colors.text2};
+  font-family: ${({ theme }) => theme.typography.fontFamily.body};
+  font-size: ${({ theme }) => theme.typography.fontSize.sm};
+  max-width: 320px;
+  cursor: pointer;
+  &:focus {
+    outline: none;
+    border-color: ${({ theme }) => theme.colors.borderAmber};
+  }
+`;
+
+// Floor for the "Skulk versions" stat: the count of released versions in the
+// Skulk CHANGELOG at build time (8, excluding [Unreleased]). Older runs predate
+// runtime fingerprints and so report no version, which would understate history
+// to zero. The displayed count never drops below this baseline.
+const SKULK_VERSION_BASELINE = 8;
 
 export function ExplorerPage() {
   const { data, error, loading } = useIndex();
-  const { window, now } = useWindow();
   const navigate = useNavigate();
-  const [params, setParams] = useSearchParams();
-  const stored = useMemo(sessionContext, []);
-  const defaultContext = useMemo(
-    () => (data ? chooseDefaultContext(data.series, window, now) : null),
-    [data, window, now],
-  );
-  const context = useMemo<SeriesContext | null>(
-    () => contextFromSearch(params, defaultContext, stored),
-    [defaultContext, params, stored],
-  );
-  const hardware = params.get('hardware') ?? 'all';
-  const backend = params.get('backend') ?? 'all';
-  const family = (params.get('family') ?? 'all') as EngineFamily | 'all';
-  const tier = (params.get('tier') ?? 'foxlight') as ProvenanceTier;
-  const query = params.get('q') ?? '';
+  const [family, setFamily] = useState<EngineFamily | 'all'>('all');
+  const [hardware, setHardware] = useState('all');
+  const [query, setQuery] = useState('');
 
-  useEffect(() => {
-    if (context == null) return;
-    try {
-      sessionStorage.setItem(CONTEXT_STORAGE, JSON.stringify(context));
-    } catch {
-      // URL state remains authoritative when session storage is unavailable.
+  const { window, now } = useWindow();
+
+  // Window each rollup's headline medians and cells, then apply filters. The
+  // windowed decodeTpsTypical / ttft / hardwareCells / counts override the
+  // all-time baked values so every number reflects the selected period; a
+  // model with no runs in the window is hidden (its absence is bound to the
+  // period, not "never tested"), and counted for the indicator below.
+  const { models, hiddenByWindow } = useMemo(() => {
+    if (!data) return { models: [] as ModelRollup[], hiddenByWindow: 0 };
+    const base = data.models.filter((m) => {
+      if (family !== 'all' && m.family !== family) return false;
+      if (query && !m.displayName.toLowerCase().includes(query.toLowerCase())) return false;
+      return true;
+    });
+    const visible: ModelRollup[] = [];
+    let hidden = 0;
+    for (const m of base) {
+      // The period indicator counts models with no data in the window at all,
+      // independent of the hardware filter, so compute the unscoped rollup for
+      // that decision first.
+      const w = windowRollup(m, window, now);
+      if (!w.hasWindowData) {
+        hidden += 1;
+        continue;
+      }
+      // When a specific hardware is selected, recompute the row from ONLY that
+      // hardware's points so every displayed metric (typical tok/s, TTFT,
+      // nodes, runs, pass rate) reflects that hardware and never blends the
+      // other shapes the model also ran on in the window. A model not run on
+      // the selected hardware in the period drops out here (hidden by hardware,
+      // not by window, so it is not counted in the period indicator).
+      const scoped = hardware === 'all' ? w : windowRollup(m, window, now, hardware);
+      // Require a first-party (foxlight) cell on the selected hardware, not just
+      // any windowed point: hardwareCells are foxlight-only, so a model with
+      // only community points on this shape in the period has an empty scoped
+      // cell and no headline number, and must not surface under the hardware
+      // filter (this preserves the pre-fix `hardwareCells.some(...)` predicate,
+      // which keyed on foxlight cells; tiers never blend).
+      if (hardware !== 'all' && !scoped.hardwareCells.some((c) => c.label === hardware))
+        continue;
+      // Recompute the has_failures caveat from the (scoped) window so it cannot
+      // contradict the shown pass rate (a row showing 100% pass in the
+      // period must not still wear an all-time "failures" chip). Other caveats
+      // are data-provenance notes that remain true about the model.
+      const caveats: Caveat[] = m.caveats.filter((c) => c !== 'has_failures');
+      if (scoped.hasFailuresInWindow) caveats.push('has_failures');
+      visible.push({
+        ...m,
+        decodeTpsTypical: scoped.decodeTpsTypical,
+        decodeTpsLatest: scoped.decodeTpsLatest,
+        ttftLatestMedian: scoped.ttftLatestMedian,
+        hardwareCells: scoped.hardwareCells,
+        credibleRunCount: scoped.credibleRunCount,
+        runCount: scoped.runCountInWindow,
+        communityRunCount: scoped.communityRunCount,
+        passRate: scoped.passRate,
+        caveats,
+        nodeCountsObserved: scoped.nodeCountsObserved,
+      });
     }
-    const required = { suite: context.suiteId, test: context.testName, protocol: context.protocolId, source: context.source };
-    if (Object.entries(required).some(([key]) => params.get(key) == null)) {
-      const next = new globalThis.URLSearchParams(params);
-      for (const [key, value] of Object.entries(required)) if (next.get(key) == null) next.set(key, value);
-      setParams(next, { replace: true });
-    }
-  }, [context, params, setParams]);
+    visible.sort((a, b) => (b.decodeTpsTypical ?? -1) - (a.decodeTpsTypical ?? -1));
+    return { models: visible, hiddenByWindow: hidden };
+  }, [data, family, hardware, query, window, now]);
 
-  const options = useMemo(() => {
-    const series = data?.series.filter((item) => item.tier === 'foxlight' && item.comparable) ?? [];
-    const suites = [...new Set(series.map((item) => item.suiteId))].sort();
-    const tests = [...new Set(series.filter((item) => item.suiteId === context?.suiteId).map((item) => item.testName))].sort();
-    const protocols = [...new Set(series.filter((item) => item.suiteId === context?.suiteId && item.testName === context?.testName).map((item) => item.protocolId).filter((value): value is string => value != null))].sort();
-    return { suites, tests, protocols };
-  }, [data, context?.suiteId, context?.testName]);
-
-  const rows = useMemo<ExplorerSeriesRow[]>(() => {
-    if (!data || context == null) return [];
-    return data.series
-      .filter((item) => item.tier === tier && item.comparable && matchesContext(item, context))
-      .filter((item) => hardware === 'all' || item.hardware.label === hardware)
-      .filter((item) => backend === 'all' || item.resolvedBackends.includes(backend))
-      .filter((item) => family === 'all' || item.family === family)
-      .filter((item) => !query || item.displayName.toLowerCase().includes(query.toLowerCase()))
-      .map((series) => ({ series, summary: summarizeSeries(series, window, now) }))
-      .filter((row) => row.summary.runCount > 0)
-      .sort((a, b) => (b.summary.medianTps ?? -1) - (a.summary.medianTps ?? -1));
-  }, [data, context, hardware, backend, family, tier, query, window, now]);
-
-  const notObserved = useMemo(() => {
-    if (!data) return [];
-    const observed = new Set(rows.map((row) => row.series.modelId));
-    return data.models.filter(
-      (model) =>
-        !observed.has(model.modelId) &&
-        (family === 'all' || model.family === family) &&
-        (!query || model.displayName.toLowerCase().includes(query.toLowerCase())),
+  // The Period control sits above these tiles, so the tiles reflect the same
+  // window: runs, models, suites, and versions observed in the selected period
+  // (all-time when the window is All). Computed from the index run summaries,
+  // which carry the timestamp / test set / version each tile needs.
+  const periodStats = useMemo(() => {
+    if (!data) return { runCount: 0, modelCount: 0, suiteCount: 0, versionCount: 0 };
+    const runs = data.runs.filter((r) => isWithinWindow(r.finishedAt ?? r.startedAt, window, now));
+    const suites = new Set(runs.map((r) => r.testSet));
+    const versions = new Set(
+      runs.map((r) => r.skulkVersion).filter((v): v is string => v != null),
     );
-  }, [data, rows, family, query]);
+    const modelCount = data.models.filter((m) => windowRollup(m, window, now).hasWindowData).length;
+    const versionCount =
+      window == null ? Math.max(versions.size, SKULK_VERSION_BASELINE) : versions.size;
+    return { runCount: runs.length, modelCount, suiteCount: suites.size, versionCount };
+  }, [data, window, now]);
 
   if (loading) return <LoadingState />;
   if (error) return <ErrorState error={error} />;
-  if (!data || context == null) return <EmptyState label="No exact client observations are available." />;
+  if (!data) return <ErrorState error="No index." />;
 
-  const columns: Column<ExplorerSeriesRow>[] = [
+  const columns: Column<ModelRollup>[] = [
     {
-      key: 'model', header: 'Model', sortValue: (row) => row.series.displayName,
-      render: (row) => <Row $gap="8px"><strong>{row.series.displayName}</strong><FamilyBadge family={row.series.family} /></Row>,
+      key: 'name',
+      header: 'Model',
+      sortValue: (m) => m.displayName,
+      render: (m) => (
+        <Row $gap="10px">
+          <strong style={{ color: 'inherit' }}>{m.displayName}</strong>
+          <FamilyBadge family={m.family} />
+        </Row>
+      ),
     },
-    { key: 'hardware', header: 'Hardware', sortValue: (row) => row.series.hardware.label, render: (row) => row.series.hardware.label },
-    { key: 'backend', header: 'Backend', render: (row) => row.series.resolvedBackends.join(', ') },
-    { key: 'tier', header: 'Provenance', render: (row) => row.series.tier },
-    { key: 'test', header: 'Test', render: (row) => row.series.testName },
-    { key: 'median', header: 'Median TPS', align: 'right', sortValue: (row) => row.summary.medianTps ?? -1, render: (row) => <strong>{formatTps(row.summary.medianTps)}</strong> },
-    { key: 'latest', header: 'Latest TPS', align: 'right', sortValue: (row) => row.summary.latestTps ?? -1, render: (row) => formatTps(row.summary.latestTps) },
-    { key: 'ttft', header: 'Median TTFT', align: 'right', render: (row) => formatSeconds(row.summary.medianTtftS) },
-    { key: 'runs', header: 'Runs', align: 'right', sortValue: (row) => row.summary.runCount, render: (row) => row.summary.runCount },
-    { key: 'cv', header: 'CV', align: 'right', sortValue: (row) => row.summary.coefficientOfVariation ?? Number.MAX_SAFE_INTEGER, render: (row) => formatPercent(row.summary.coefficientOfVariation, 1) },
-    { key: 'status', header: 'Status', render: (row) => <SeriesStatusChip status={row.summary.status} /> },
+    {
+      key: 'decode',
+      header: 'Typical tok/s',
+      align: 'right',
+      sortValue: (m) => m.decodeTpsTypical ?? -1,
+      render: (m) => <strong style={{ color: '#f0ede8' }}>{formatTps(m.decodeTpsTypical)}</strong>,
+    },
+    {
+      key: 'ttft',
+      header: 'TTFT',
+      align: 'right',
+      sortValue: (m) => m.ttftLatestMedian ?? Number.MAX_SAFE_INTEGER,
+      render: (m) => formatSeconds(m.ttftLatestMedian),
+    },
+    {
+      key: 'nodes',
+      header: 'Nodes',
+      align: 'center',
+      sortValue: (m) => m.nodeCountsObserved[0] ?? 0,
+      render: (m) => (m.nodeCountsObserved.length ? m.nodeCountsObserved.join(', ') : '—'),
+    },
+    {
+      key: 'runs',
+      header: 'Runs',
+      align: 'right',
+      sortValue: (m) => m.runCount,
+      render: (m) => (
+        <span>
+          {m.runCount} <Muted>({m.credibleRunCount} cred)</Muted>
+        </span>
+      ),
+    },
+    {
+      key: 'pass',
+      header: 'Pass rate',
+      align: 'center',
+      sortValue: (m) => m.passRate,
+      render: (m) => <PassRateChip passRate={m.passRate} />,
+    },
+    {
+      key: 'caveats',
+      header: 'Caveats',
+      render: (m) => (
+        <Row $gap="5px" $wrap>
+          <CaveatList caveats={m.caveats} />
+        </Row>
+      ),
+    },
   ];
-
-  const updateContext = (updates: Partial<SeriesContext>) => {
-    const next = new globalThis.URLSearchParams(params);
-    const merged = { ...context, ...updates };
-    next.set('suite', merged.suiteId);
-    next.set('test', merged.testName);
-    next.set('protocol', merged.protocolId);
-    next.set('source', merged.source);
-    setParams(next);
-  };
 
   return (
     <Page>
       <Hero>
         <Eyebrow>Skulk results ledger</Eyebrow>
-        <Title>Performance in context.</Title>
-        <Sub>Every row is one model plus exact hardware, backend, test protocol, and metric source. “All hardware” expands the comparison; it never averages the fleet.</Sub>
+        <Title>Skulk performance.</Title>
+        <Sub>
+          Every benchmark run across the Foxlight fleet. Throughput is the median of valid samples
+          only. Click any point or row for the full run behind it.
+        </Sub>
       </Hero>
-      <Controls aria-label="Benchmark context">
-        <Control>Suite<Select value={context.suiteId} onChange={(event) => { const suiteId = event.target.value; const testName = data.series.find((item) => item.suiteId === suiteId && item.comparable)?.testName ?? ''; const protocolId = data.series.find((item) => item.suiteId === suiteId && item.testName === testName && item.protocolId)?.protocolId ?? ''; updateContext({ suiteId, testName, protocolId }); }}>{options.suites.map((value) => <option key={value}>{value}</option>)}</Select></Control>
-        <Control>Test<Select value={context.testName} onChange={(event) => { const testName = event.target.value; const protocolId = data.series.find((item) => item.suiteId === context.suiteId && item.testName === testName && item.protocolId)?.protocolId ?? ''; updateContext({ testName, protocolId }); }}>{options.tests.map((value) => <option key={value}>{value}</option>)}</Select></Control>
-        <Control>Protocol<Select value={context.protocolId} onChange={(event) => updateContext({ protocolId: event.target.value })}>{options.protocols.map((value) => <option key={value} value={value}>{value.slice(0, 12)}</option>)}</Select></Control>
-        <Control>Metric source<Select value={context.source} onChange={(event) => updateContext({ source: event.target.value as MetricSource })}><option value="client_exact">Client exact</option><option value="engine_reported">Engine reported</option><option value="client_approx">Client approximate</option></Select></Control>
-        <Control>Hardware<Select value={hardware} onChange={(event) => setParam(params, setParams, 'hardware', event.target.value)}><option value="all">All hardware</option>{data.hardwareLabels.map((value) => <option key={value}>{value}</option>)}</Select></Control>
-        <Control>Backend<Select value={backend} onChange={(event) => setParam(params, setParams, 'backend', event.target.value)}><option value="all">All backends</option>{data.backends.map((value) => <option key={value}>{value}</option>)}</Select></Control>
-        <Control>Family<Select value={family} onChange={(event) => setParam(params, setParams, 'family', event.target.value)}><option value="all">All families</option>{(['mlx', 'llama_cpp', 'llama_server'] as EngineFamily[]).map((value) => <option key={value} value={value}>{FAMILY_META[value].label}</option>)}</Select></Control>
-        <Control>Provenance<Select value={tier} onChange={(event) => setParam(params, setParams, 'tier', event.target.value)}><option value="foxlight">Foxlight</option><option value="community">Community</option></Select></Control>
-        <Control>Search<Search value={query} placeholder="Model name" onChange={(event) => setParam(params, setParams, 'q', event.target.value)} /></Control>
+
+      <Stats>
+        <Stat>
+          <StatNum>{periodStats.runCount}</StatNum>
+          <StatLabel>runs recorded</StatLabel>
+        </Stat>
+        <Stat>
+          <StatNum>{periodStats.modelCount}</StatNum>
+          <StatLabel>models measured</StatLabel>
+        </Stat>
+        <Stat>
+          <StatNum>{periodStats.suiteCount}</StatNum>
+          <StatLabel>test suites</StatLabel>
+        </Stat>
+        <Stat>
+          <StatNum>{periodStats.versionCount}</StatNum>
+          <StatLabel>Skulk versions</StatLabel>
+        </Stat>
+      </Stats>
+
+      {models.some((m) => m.decodeTpsTypical != null && m.ttftLatestMedian != null) ? (
+        <SpeedScatter models={models} />
+      ) : (
+        <EmptyState label="No models have both a credible throughput and a TTFT under this filter." />
+      )}
+
+      <Controls $gap="8px">
+        <Search
+          placeholder="Filter models…"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+        {FAMILIES.map((f) => (
+          <FilterBtn key={f} $active={family === f} onClick={() => setFamily(f)}>
+            {f === 'all' ? 'All engines' : FAMILY_META[f].label}
+          </FilterBtn>
+        ))}
+        <HardwareSelect value={hardware} onChange={(e) => setHardware(e.target.value)}>
+          <option value="all">All hardware</option>
+          {data.hardwareLabels.map((label) => (
+            <option key={label} value={label}>
+              {label}
+            </option>
+          ))}
+        </HardwareSelect>
       </Controls>
 
-      {rows.length > 0 ? <SpeedScatter rows={rows} /> : <EmptyState label="No observations match this exact context." />}
-      <Section>Observed in this context</Section>
-      {rows.length > 0 && <SortableTable columns={columns} rows={rows} rowKey={(row) => row.series.seriesId} onRowClick={(row) => navigate(`/model/${row.series.slug}?suite=${encodeURIComponent(row.series.suiteId)}&test=${encodeURIComponent(row.series.testName)}&protocol=${encodeURIComponent(row.series.protocolId ?? '')}&source=${row.series.source}&tier=${row.series.tier}&hardware=${row.series.seriesId}`)} initialSortKey="median" initialSortDir="desc" />}
-
-      <Section>Not observed in this context</Section>
-      <Coverage>
-        {notObserved.length ? <Row $gap="8px" $wrap>{notObserved.map((model) => <Muted key={model.modelId}>{model.displayName}</Muted>)}</Row> : <Muted>Every matching model has an observation in this context.</Muted>}
-      </Coverage>
+      <SectionLabel>All models</SectionLabel>
+      {hiddenByWindow > 0 && (
+        <HiddenNote>
+          {hiddenByWindow} {hiddenByWindow === 1 ? 'model' : 'models'} hidden with no runs in this
+          period. Widen the window to see them.
+        </HiddenNote>
+      )}
+      {models.length === 0 ? (
+        <EmptyState
+          label={
+            hiddenByWindow > 0
+              ? 'No runs in this period. Widen the window, or select All.'
+              : 'No models match your filter.'
+          }
+        />
+      ) : (
+        <SortableTable
+          columns={columns}
+          rows={models}
+          rowKey={(m) => m.slug}
+          onRowClick={(m) => navigate(`/model/${m.slug}`)}
+          initialSortKey="decode"
+          initialSortDir="desc"
+        />
+      )}
     </Page>
   );
 }

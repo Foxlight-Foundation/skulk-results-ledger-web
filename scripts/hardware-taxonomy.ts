@@ -15,8 +15,6 @@
  * the site, so new shapes extend this file without a schema change.
  */
 
-import { createHash } from 'node:crypto';
-
 import type { HardwareProfile } from '../src/data/schema.ts';
 import { hasFullyKnownHardware } from '../src/data/hardware.ts';
 
@@ -194,7 +192,6 @@ export const UNKNOWN_HARDWARE: HardwareProfile = {
   nodeCount: 0,
   homogeneous: false,
   known: false,
-  profileId: null,
 };
 
 /**
@@ -232,44 +229,11 @@ export function profileOf(
       return count > 1 ? `${count}x ${base}` : base;
     })
     .join(' + ');
-  const known = hasFullyKnownHardware(classes);
-  // Series identity describes the execution shape, not incidental probe-byte
-  // drift. Two reports from the same chip and canonical memory tier must join
-  // even when firmware reserves a few KiB differently or newer fingerprints
-  // add GTT/VRAM probes. Chip + normalized memory remains exact enough to keep
-  // materially different hardware out of the same series.
-  const exactFacts = nodes
-    .map((node) => ({
-      acceleratorName: node.acceleratorName?.toLowerCase().trim().replace(/\s+/g, ' ') || null,
-      acceleratorVendor: node.acceleratorVendor?.toLowerCase().trim() || null,
-      memoryGb: nodeMemoryGb(
-        node.acceleratorVendor,
-        node.ramTotalBytes,
-        node.acceleratorName,
-        {
-          vramTotalBytes: node.vramTotalBytes,
-          gttTotalBytes: node.gttTotalBytes,
-          trustApuFallback,
-        },
-      ),
-    }))
-    .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
-  const exactHardwareKnown =
-    known &&
-    exactFacts.every(
-      (node) =>
-        node.acceleratorVendor != null &&
-        node.acceleratorName != null &&
-        node.memoryGb != null,
-    );
   return {
     classes,
     label,
     nodeCount: nodes.length,
     homogeneous: classes.length === 1,
-    known: exactHardwareKnown,
-    profileId: exactHardwareKnown
-      ? createHash('sha256').update(JSON.stringify(exactFacts)).digest('hex')
-      : null,
+    known: hasFullyKnownHardware(classes),
   };
 }

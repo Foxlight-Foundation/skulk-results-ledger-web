@@ -10,9 +10,8 @@
  * re-aggregation logic the pages apply.
  */
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { useSearchParams } from 'react-router-dom';
 
 import { DEFAULT_WINDOW, windowFromParam, windowToParam } from './window';
 import type { TimeWindow } from './window';
@@ -30,8 +29,7 @@ interface WindowContextValue {
 
 const WindowContext = createContext<WindowContextValue | null>(null);
 
-function readStored(urlValue: string | null): TimeWindow {
-  if (urlValue != null) return windowFromParam(urlValue);
+function readStored(): TimeWindow {
   if (typeof sessionStorage === 'undefined') return DEFAULT_WINDOW;
   try {
     return windowFromParam(sessionStorage.getItem(STORAGE_KEY));
@@ -42,30 +40,17 @@ function readStored(urlValue: string | null): TimeWindow {
 
 /** Provides the shared window selection. Wrap the app once. */
 export function WindowProvider({ children }: { children: ReactNode }) {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [window, setWindowState] = useState<TimeWindow>(() =>
-    readStored(searchParams.get('window')),
-  );
+  const [window, setWindowState] = useState<TimeWindow>(readStored);
   const [now] = useState(() => Date.now());
-
-  useEffect(() => {
-    const urlValue = searchParams.get('window');
-    if (urlValue != null) setWindowState(windowFromParam(urlValue));
-  }, [searchParams]);
 
   const setWindow = useCallback((w: TimeWindow) => {
     setWindowState(w);
-    setSearchParams((current) => {
-      const next = new globalThis.URLSearchParams(current);
-      next.set('window', windowToParam(w));
-      return next;
-    }, { replace: true });
     try {
       sessionStorage.setItem(STORAGE_KEY, windowToParam(w));
     } catch {
       // Private mode / storage disabled: selection still works for the session.
     }
-  }, [setSearchParams]);
+  }, []);
 
   const value = useMemo(() => ({ window, setWindow, now }), [window, setWindow, now]);
   return <WindowContext.Provider value={value}>{children}</WindowContext.Provider>;

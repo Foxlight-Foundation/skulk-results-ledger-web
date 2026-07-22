@@ -1,61 +1,199 @@
 import { useMemo } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 
-import { FamilyBadge, SeriesStatusChip } from '../components/Chip';
-import { Eyebrow, Muted, Page, Panel, Row } from '../components/primitives';
-import { EmptyState, ErrorState, LoadingState } from '../components/States';
-import type { MetricSource, PerformanceSeries, ProvenanceTier } from '../data/schema';
+import { FamilyBadge } from '../components/Chip';
+import { Eyebrow, Muted, Page, Row } from '../components/primitives';
+import { ErrorState, LoadingState } from '../components/States';
+import type { ModelRollup } from '../data/schema';
 import { formatTps } from '../data/format';
-import { chooseDefaultContext, matchesContext, summarizeSeries } from '../data/series';
+import { hasFullyKnownHardware } from '../data/hardware';
 import { useIndex } from '../data/useLedger';
 import { useWindow } from '../data/useWindow';
+import { windowRollup } from '../data/window';
 
-const Title = styled.h1`font-size:${({ theme }) => theme.typography.fontSize.sectionH};`;
-const Sub = styled.p`color:${({ theme }) => theme.colors.text2}; max-width:70ch; margin:10px 0 20px;`;
-const Controls = styled(Panel)`display:grid; grid-template-columns:repeat(4,minmax(150px,1fr)); gap:10px; padding:14px; margin-bottom:18px; @media(max-width:760px){grid-template-columns:1fr 1fr} @media(max-width:520px){grid-template-columns:1fr}`;
-const Label = styled.label`display:grid;gap:5px;font:10px monospace;text-transform:uppercase;color:#8a8680;`;
-const Select = styled.select`background:#0b1124;color:#f0ede8;border:1px solid rgba(240,237,232,.14);border-radius:8px;padding:9px;text-transform:none;`;
-const Scroll = styled.div`overflow-x:auto;border:1px solid ${({theme})=>theme.colors.border1};border-radius:${({theme})=>theme.radii.card};background:${({theme})=>theme.colors.panelBg};`;
-const Table = styled.table`width:100%;border-collapse:collapse;font-size:13px;th,td{padding:12px 14px;border-bottom:1px solid rgba(240,237,232,.07);white-space:nowrap;text-align:right}th:first-child,td:first-child{text-align:left}th{font:10px monospace;text-transform:uppercase;color:#8a8680}tbody tr{cursor:pointer}tbody tr:hover{background:rgba(255,255,255,.04)}`;
+const Title = styled.h1`
+  font-size: ${({ theme }) => theme.typography.fontSize.sectionH};
+  letter-spacing: ${({ theme }) => theme.typography.letterSpacing.section};
+`;
 
-function profileKey(series: PerformanceSeries): string {
-  return [series.hardware.profileId, series.resolvedBackends.join(','), series.instanceType, series.sharding, series.shardTypes.join(',')].join('|');
-}
+const Sub = styled.p`
+  color: ${({ theme }) => theme.colors.text2};
+  max-width: 68ch;
+  margin: ${({ theme }) => theme.spacing.sm} 0 ${({ theme }) => theme.spacing.lg};
+`;
 
+const Scroll = styled.div`
+  overflow-x: auto;
+  border: 1px solid ${({ theme }) => theme.colors.border1};
+  border-radius: ${({ theme }) => theme.radii.card};
+  background: ${({ theme }) => theme.colors.panelBg};
+  backdrop-filter: blur(20px) saturate(1.3);
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
+`;
+
+const Table = styled.table`
+  width: 100%;
+  border-collapse: collapse;
+  font-size: ${({ theme }) => theme.typography.fontSize.sm};
+
+  th {
+    font-family: ${({ theme }) => theme.typography.fontFamily.mono};
+    font-size: 10px;
+    font-weight: ${({ theme }) => theme.typography.fontWeight.semibold};
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+    color: ${({ theme }) => theme.colors.text3};
+    text-align: right;
+    padding: 14px 16px;
+    border-bottom: 1px solid ${({ theme }) => theme.colors.border1};
+    white-space: nowrap;
+  }
+  th:first-child {
+    text-align: left;
+  }
+  td {
+    padding: 12px 16px;
+    border-bottom: 1px solid ${({ theme }) => theme.colors.border0};
+    text-align: right;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+  }
+  td:first-child {
+    text-align: left;
+  }
+  tbody tr {
+    cursor: pointer;
+    transition: background 120ms ease;
+  }
+  tbody tr:hover {
+    background: ${({ theme }) => theme.colors.moonWash};
+  }
+`;
+
+const Cell = styled.span<{ $credible: boolean }>`
+  color: ${({ theme, $credible }) => ($credible ? theme.colors.text1 : theme.colors.text4)};
+`;
+
+const FootNote = styled.p`
+  color: ${({ theme }) => theme.colors.text3};
+  font-size: ${({ theme }) => theme.typography.fontSize.xs};
+  margin-top: ${({ theme }) => theme.spacing.md};
+  max-width: 72ch;
+`;
+
+/**
+ * Model-by-hardware matrix: one row per model, one column per distinct
+ * hardware shape observed, cell = typical credible decode tok/s on that
+ * hardware. Cells without a credible sample show the run count dimmed, so
+ * "we ran it but the numbers did not clear the bar" stays distinguishable
+ * from "never ran there".
+ */
 export function HardwarePage() {
   const { data, error, loading } = useIndex();
-  const { window, now } = useWindow();
-  const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
-  const fallback = useMemo(()=>data?chooseDefaultContext(data.series,window,now):null,[data,window,now]);
-  if (loading) return <LoadingState/>;
-  if (error) return <ErrorState error={error}/>;
-  if (!data || !fallback) return <EmptyState label="No exact hardware series available."/>;
-  const context = {
-    suiteId: params.get('suite') ?? fallback.suiteId,
-    testName: params.get('test') ?? fallback.testName,
-    protocolId: params.get('protocol') ?? fallback.protocolId,
-    source: (params.get('source') ?? fallback.source) as MetricSource,
-  };
-  const tier=(params.get('tier')??'foxlight') as ProvenanceTier;
-  const candidates = data.series.filter((item)=>item.tier===tier && item.comparable && matchesContext(item,context)).map((series)=>({series,summary:summarizeSeries(series,window,now)})).filter((item)=>item.summary.runCount>0);
-  const profiles = [...new Map(candidates.map((item)=>[profileKey(item.series),item.series] as const)).entries()].map(([key,series])=>({key,series}));
-  const rows = data.models.filter((model)=>candidates.some((item)=>item.series.modelId===model.modelId));
-  const suites=[...new Set(data.series.filter((item)=>item.comparable).map((item)=>item.suiteId))].sort();
-  const tests=[...new Set(data.series.filter((item)=>item.comparable&&item.suiteId===context.suiteId).map((item)=>item.testName))].sort();
-  const protocols=[...new Set(data.series.filter((item)=>item.comparable&&item.suiteId===context.suiteId&&item.testName===context.testName).map((item)=>item.protocolId).filter((value):value is string=>value!=null))].sort();
-  const update=(key:string,value:string)=>{const next=new globalThis.URLSearchParams(params);next.set(key,value);setParams(next)};
-  const updateContext=(nextSuite:string,nextTest?:string)=>{const test=nextTest??data.series.find((item)=>item.comparable&&item.suiteId===nextSuite)?.testName??'';const protocol=data.series.find((item)=>item.comparable&&item.suiteId===nextSuite&&item.testName===test&&item.protocolId!=null)?.protocolId??'';const next=new globalThis.URLSearchParams(params);next.set('suite',nextSuite);next.set('test',test);next.set('protocol',protocol);setParams(next)};
-  return <Page>
-    <Eyebrow>Hardware</Eyebrow><Title>Same protocol, different metal.</Title><Sub>Every matrix cell uses the selected suite, test, protocol revision, and metric source. Columns are exact hardware/backend/placement profiles; no cell blends tests or engines.</Sub>
-    <Controls>
-      <Label>Suite<Select value={context.suiteId} onChange={(e)=>updateContext(e.target.value)}>{suites.map((value)=><option key={value}>{value}</option>)}</Select></Label>
-      <Label>Test<Select value={context.testName} onChange={(e)=>updateContext(context.suiteId,e.target.value)}>{tests.map((value)=><option key={value}>{value}</option>)}</Select></Label>
-      <Label>Protocol<Select value={context.protocolId} onChange={(e)=>update('protocol',e.target.value)}>{protocols.map((value)=><option key={value} value={value}>{value.slice(0,12)}</option>)}</Select></Label>
-      <Label>Source<Select value={context.source} onChange={(e)=>update('source',e.target.value)}><option value="client_exact">Client exact</option><option value="engine_reported">Engine reported</option><option value="client_approx">Client approximate</option></Select></Label>
-      <Label>Provenance<Select value={tier} onChange={(e)=>update('tier',e.target.value)}><option value="foxlight">Foxlight</option><option value="community">Community</option></Select></Label>
-    </Controls>
-    {rows.length===0?<EmptyState label="No hardware cells match this context."/>:<Scroll><Table><thead><tr><th>Model</th>{profiles.map(({key,series})=><th key={key}>{series.hardware.label}<br/><Muted>{series.resolvedBackends.join(', ')}</Muted></th>)}</tr></thead><tbody>{rows.map((model)=><tr key={model.modelId} onClick={()=>navigate(`/model/${model.slug}?suite=${encodeURIComponent(context.suiteId)}&test=${encodeURIComponent(context.testName)}&protocol=${context.protocolId}&source=${context.source}&tier=${tier}`)}><td><Row $gap="8px"><strong>{model.displayName}</strong><FamilyBadge family={model.family}/></Row></td>{profiles.map(({key})=>{const cell=candidates.find((item)=>item.series.modelId===model.modelId&&profileKey(item.series)===key);return <td key={key}>{cell?<div><strong>{formatTps(cell.summary.medianTps)}</strong> / {formatTps(cell.summary.latestTps)}<br/><Muted>N={cell.summary.runCount}</Muted> <SeriesStatusChip status={cell.summary.status}/></div>:'·'}</td>})}</tr>)}</tbody></Table></Scroll>}
-  </Page>;
+
+  const { window, now } = useWindow();
+
+  const { labels, rows } = useMemo(() => {
+    if (!data) return { labels: [] as string[], rows: [] as ModelRollup[] };
+    // Window each model's per-hardware cells, then build the columns and rows
+    // from the windowed cells so the whole matrix reflects the selected period;
+    // a model with no windowed hardware cells drops out.
+    const windowed: ModelRollup[] = data.models.map((m) => ({
+      ...m,
+      hardwareCells: windowRollup(m, window, now).hardwareCells,
+    }));
+    // Columns: known hardware shapes actually observed in the window, widest
+    // coverage first so the interesting columns lead.
+    const coverage = new Map<string, number>();
+    for (const m of windowed) {
+      for (const c of m.hardwareCells) {
+        if (hasFullyKnownHardware(c.classes)) {
+          coverage.set(c.label, (coverage.get(c.label) ?? 0) + 1);
+        }
+      }
+    }
+    const labels = [...coverage.entries()].sort((a, b) => b[1] - a[1]).map(([l]) => l);
+    const rows = windowed.filter((m) =>
+      m.hardwareCells.some((c) => hasFullyKnownHardware(c.classes)),
+    );
+    return { labels, rows };
+  }, [data, window, now]);
+
+  if (loading) return <LoadingState />;
+  if (error) return <ErrorState error={error} />;
+  if (!data) return <ErrorState error="No index." />;
+
+  return (
+    <Page>
+      <Eyebrow>Hardware</Eyebrow>
+      <Title>Same model, different metal.</Title>
+      <Sub>
+        Typical decode tok/s per hardware shape: the median of credible per-run medians for that
+        model ON that hardware. Attribution is exact where the run recorded placement nodes.
+        Dimmed counts mean runs exist there but none cleared the credibility bar.
+      </Sub>
+
+      <Scroll>
+        <Table>
+          <thead>
+            <tr>
+              <th>Model</th>
+              {labels.map((l) => (
+                <th key={l}>{l}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((m) => (
+              <tr key={m.slug} onClick={() => navigate(`/model/${m.slug}`)}>
+                <td>
+                  <Row $gap="8px">
+                    <strong style={{ color: '#f0ede8' }}>{m.displayName}</strong>
+                    <FamilyBadge family={m.family} />
+                  </Row>
+                </td>
+                {labels.map((label) => {
+                  const cell = m.hardwareCells.find((c) => c.label === label);
+                  if (!cell) return <td key={label}>{'·'}</td>;
+                  const clusterNote =
+                    cell.clusterAttributedRunCount > 0
+                      ? `; ${cell.clusterAttributedRunCount} cluster-fallback (whole-cluster shape, placement not recorded)`
+                      : '';
+                  return (
+                    <td
+                      key={label}
+                      title={`${cell.runCount} run(s), ${cell.credibleRunCount} credible${clusterNote}`}
+                    >
+                      {cell.decodeTpsTypical != null ? (
+                        <Cell $credible>
+                          {formatTps(cell.decodeTpsTypical)}
+                          {cell.clusterAttributedRunCount > 0 && <Muted>*</Muted>}
+                        </Cell>
+                      ) : (
+                        <Cell $credible={false}>
+                          {cell.runCount} run{cell.runCount === 1 ? '' : 's'}
+                          {cell.clusterAttributedRunCount > 0 && '*'}
+                        </Cell>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </Table>
+      </Scroll>
+
+      <FootNote>
+        Cells marked * include cluster-fallback samples: the run did not record which nodes
+        served the model, so the shape shown is the whole cluster (an upper bound), not
+        verified placement. Hardware classes are vendor + memory tier, derived from each run&apos;s fingerprint;
+        chip-level classes (M4 vs M5, specific GPUs) arrive as newer runs record accelerator
+        names. Reports with incomplete hardware profiles remain archived but are omitted from every
+        dashboard view and aggregate.
+      </FootNote>
+    </Page>
+  );
 }

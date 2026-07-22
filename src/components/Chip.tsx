@@ -1,6 +1,6 @@
 import styled, { css } from 'styled-components';
 
-import type { Caveat, EngineFamily, SeriesStatus } from '../data/schema';
+import type { Caveat, EngineFamily } from '../data/schema';
 import { CAVEAT_META, FAMILY_META } from '../data/format';
 
 type Tone = 'warn' | 'fail' | 'neutral' | 'pass' | 'amber' | 'cyan';
@@ -67,17 +67,4 @@ export function FamilyBadge({ family }: { family: EngineFamily }) {
 export function PassRateChip({ passRate }: { passRate: number }) {
   const tone: Tone = passRate >= 0.999 ? 'pass' : passRate >= 0.9 ? 'warn' : 'fail';
   return <Chip $tone={tone}>{(passRate * 100).toFixed(0)}% pass</Chip>;
-}
-
-/** Factual longitudinal status for one exact performance series. */
-export function SeriesStatusChip({ status }: { status: SeriesStatus }) {
-  const tone: Tone =
-    status === 'Stable'
-      ? 'pass'
-      : status === 'Variable'
-        ? 'warn'
-        : status === 'Observed'
-          ? 'cyan'
-          : 'neutral';
-  return <Chip $tone={tone}>{status}</Chip>;
 }

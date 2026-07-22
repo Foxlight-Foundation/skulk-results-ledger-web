@@ -2,86 +2,51 @@ import { useNavigate } from 'react-router-dom';
 import {
   CartesianGrid,
   Cell,
-  ResponsiveContainer,
   Scatter,
   ScatterChart,
   Tooltip,
   XAxis,
   YAxis,
   ZAxis,
+  ResponsiveContainer,
 } from 'recharts';
 
-import type { PerformanceSeries, SeriesSummary } from '../../data/schema';
+import type { ModelRollup } from '../../data/schema';
 import { FAMILY_META, formatSeconds, formatTps } from '../../data/format';
-import {
-  ChartCard,
-  ChartHeading,
-  ChartHint,
-  ChartTitle,
-  TooltipShell,
-  useChartPalette,
-} from './ChartFrame';
+import { ChartCard, ChartHeading, ChartHint, ChartTitle, TooltipShell, useChartPalette } from './ChartFrame';
 
-export interface ExplorerSeriesRow {
-  series: PerformanceSeries;
-  summary: SeriesSummary;
-}
-
-interface ScatterPoint {
+interface Point {
   x: number;
   y: number;
   z: number;
   slug: string;
-  seriesId: string;
-  suiteId: string;
-  testName: string;
   name: string;
-  hardware: string;
-  backend: string;
-  source: string;
-  protocol: string;
-  tier: string;
-  repetitions: number;
-  latestRunId: string | null;
-  skulkVersion: string | null;
-  skulkCommit: string | null;
-  runs: number;
+  family: string;
   fill: string;
 }
 
-/** Speed and latency from the same exact series population. */
-export function SpeedScatter({ rows }: { rows: ExplorerSeriesRow[] }) {
+/**
+ * Speed-vs-latency scatter: y = typical decode tok/s (credible), x = TTFT.
+ * The upper-left is the sweet spot (fast decode, low latency). Colored by
+ * engine family, sized by run count. Only models with both a credible
+ * throughput and a TTFT appear here; the rest live in the table below.
+ */
+export function SpeedScatter({ models }: { models: ModelRollup[] }) {
   const palette = useChartPalette();
   const navigate = useNavigate();
-  const points: ScatterPoint[] = rows
-    .filter((row) => row.summary.medianTps != null && row.summary.medianTtftS != null)
-    .map(({ series, summary }) => {
-      const familyColor = FAMILY_META[series.family].color;
+
+  const points: Point[] = models
+    .filter((m) => m.decodeTpsTypical != null && m.ttftLatestMedian != null)
+    .map((m) => {
+      const fam = FAMILY_META[m.family].color;
       return {
-        x: summary.medianTtftS as number,
-        y: summary.medianTps as number,
-        z: Math.max(summary.runCount, 1),
-        slug: series.slug,
-        seriesId: series.seriesId,
-        suiteId: series.suiteId,
-        testName: series.testName,
-        name: series.displayName,
-        hardware: series.hardware.label,
-        backend: series.resolvedBackends.join(', '),
-        source: series.source,
-        protocol: series.protocolId ?? 'legacy',
-        tier: series.tier,
-        repetitions: summary.repetitionCount,
-        latestRunId: series.points.at(-1)?.runId ?? null,
-        skulkVersion: series.points.at(-1)?.skulkVersion ?? null,
-        skulkCommit: series.points.at(-1)?.skulkCommit ?? null,
-        runs: summary.runCount,
-        fill:
-          familyColor === 'cyan'
-            ? palette.cyan
-            : familyColor === 'amber'
-              ? palette.amber
-              : palette.neutral,
+        x: m.ttftLatestMedian as number,
+        y: m.decodeTpsTypical as number,
+        z: Math.max(m.runCount, 1),
+        slug: m.slug,
+        name: m.displayName,
+        family: FAMILY_META[m.family].label,
+        fill: fam === 'cyan' ? palette.cyan : fam === 'amber' ? palette.amber : palette.neutral,
       };
     });
 
@@ -89,7 +54,7 @@ export function SpeedScatter({ rows }: { rows: ExplorerSeriesRow[] }) {
     <ChartCard>
       <ChartHeading>
         <ChartTitle>Speed vs. latency</ChartTitle>
-        <ChartHint>same test, protocol, source, hardware, and backend per point</ChartHint>
+        <ChartHint>y: decode tok/s · x: time to first token · size: runs</ChartHint>
       </ChartHeading>
       <ResponsiveContainer width="100%" height={420}>
         <ScatterChart margin={{ top: 12, right: 24, bottom: 28, left: 8 }}>
@@ -97,34 +62,32 @@ export function SpeedScatter({ rows }: { rows: ExplorerSeriesRow[] }) {
           <XAxis
             type="number"
             dataKey="x"
+            name="TTFT"
             stroke={palette.axis}
             tick={{ fill: palette.axis, fontFamily: palette.font, fontSize: 11 }}
-            tickFormatter={(value: number) => formatSeconds(value)}
-            label={{ value: 'median time to first token', position: 'bottom', fill: palette.axis, fontSize: 11 }}
+            tickFormatter={(v: number) => formatSeconds(v)}
+            label={{ value: 'time to first token', position: 'bottom', fill: palette.axis, fontSize: 11 }}
           />
           <YAxis
             type="number"
             dataKey="y"
+            name="decode tok/s"
             stroke={palette.axis}
             tick={{ fill: palette.axis, fontFamily: palette.font, fontSize: 11 }}
-            label={{ value: 'median decode tok/s', angle: -90, position: 'insideLeft', fill: palette.axis, fontSize: 11 }}
+            label={{ value: 'decode tok/s', angle: -90, position: 'insideLeft', fill: palette.axis, fontSize: 11 }}
           />
           <ZAxis type="number" dataKey="z" range={[60, 420]} />
           <Tooltip
             cursor={{ strokeDasharray: '3 3', stroke: palette.axis }}
             content={({ active, payload }) => {
               if (!active || !payload?.length) return null;
-              const point = payload[0].payload as ScatterPoint;
+              const p = payload[0].payload as Point;
               return (
                 <TooltipShell>
-                  <strong>{point.name}</strong>
-                  <div>{point.hardware}</div>
-                  <div>{point.backend} · {point.source.replace('_', ' ')}</div>
-                  <div>{point.tier} · protocol {point.protocol.slice(0, 12)}</div>
-                  <div>median {formatTps(point.y)} tok/s · TTFT {formatSeconds(point.x)}</div>
-                  <div style={{ opacity: 0.7 }}>{point.runs} distinct run(s) · {point.repetitions} repetitions</div>
-                  <div style={{ opacity: 0.7 }}>Skulk {point.skulkVersion ?? 'unknown'}{point.skulkCommit ? ` · ${point.skulkCommit.slice(0, 8)}` : ''}</div>
-                  {point.latestRunId && <button type="button" onClick={() => navigate(`/run/${point.latestRunId}`)} style={{ all: 'unset', cursor: 'pointer', color: palette.cyan }}>Open latest run</button>}
+                  <strong>{p.name}</strong>
+                  <div>{p.family}</div>
+                  <div>decode {formatTps(p.y)} tok/s · TTFT {formatSeconds(p.x)}</div>
+                  <div style={{ opacity: 0.7 }}>{p.z} run(s) · click to open</div>
                 </TooltipShell>
               );
             }}
@@ -132,15 +95,15 @@ export function SpeedScatter({ rows }: { rows: ExplorerSeriesRow[] }) {
           <Scatter
             data={points}
             fillOpacity={0.85}
-            onClick={(raw: unknown) => {
-              const point = raw as ScatterPoint;
-              if (point.slug) navigate(`/model/${point.slug}?suite=${encodeURIComponent(point.suiteId)}&test=${encodeURIComponent(point.testName)}&protocol=${encodeURIComponent(point.protocol)}&source=${point.source}&tier=${point.tier}&hardware=${point.seriesId}`);
+            onClick={(p: unknown) => {
+              const point = p as Point;
+              if (point?.slug) navigate(`/model/${point.slug}`);
             }}
             style={{ cursor: 'pointer' }}
             shape="circle"
           >
-            {points.map((point) => (
-              <Cell key={point.seriesId} fill={point.fill} />
+            {points.map((p) => (
+              <Cell key={p.slug} fill={p.fill} />
             ))}
           </Scatter>
         </ScatterChart>
