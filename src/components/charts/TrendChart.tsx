@@ -92,7 +92,7 @@ export function TrendChart({ timeline }: { timeline: ModelTimePoint[] }) {
                 <TooltipShell>
                   <strong>{formatTps(p.value)} tok/s</strong>
                   <div>{p.label}</div>
-                  {p.version && <div>Skulk {p.version}</div>}
+                  {p.version && <div>Skulk™ {p.version}</div>}
                   <div style={{ opacity: 0.7 }}>{p.credible ? 'credible' : 'low-confidence sample'}</div>
                 </TooltipShell>
               );

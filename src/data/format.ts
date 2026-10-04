@@ -29,7 +29,7 @@ export const CAVEAT_META: Record<Caveat, { label: string; tone: 'warn' | 'fail' 
     label: 'no fingerprint',
     tone: 'neutral',
     description:
-      'This run predates runtime fingerprints, so its exact Skulk version, node set, and cache state are not recorded.',
+      'This run predates runtime fingerprints, so its exact Skulk™ version, node set, and cache state are not recorded.',
   },
   decode_tps_estimated: {
     label: 'throughput estimate',

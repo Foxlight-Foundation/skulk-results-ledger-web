@@ -166,7 +166,7 @@ export function RunPage() {
           </MetaValue>
         </Meta>
         <Meta>
-          <MetaLabel>Skulk</MetaLabel>
+          <MetaLabel>Skulk™</MetaLabel>
           <MetaValue>
             {data.skulkVersion ?? 'unknown'}
             {data.skulkCommit ? ` · ${data.skulkCommit}` : ''}

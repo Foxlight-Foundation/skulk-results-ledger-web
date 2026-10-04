@@ -337,9 +337,9 @@ const FOOTER_COLUMNS = [
   {
     heading: 'Products',
     links: [
-      { label: 'Skulk', href: 'https://foxlight.ai/products/skulk' },
-      { label: 'Foxmemory', href: 'https://foxlight.ai/products/foxmemory' },
-      { label: 'Foxden', href: 'https://foxlight.ai/products/foxden' },
+      { label: 'Skulk™', href: 'https://foxlight.ai/products/skulk' },
+      { label: 'Foxmemory™', href: 'https://foxlight.ai/products/foxmemory' },
+      { label: 'Foxden™', href: 'https://foxlight.ai/products/foxden' },
       { label: 'Open Source', href: 'https://foxlight.ai/open' },
     ],
   },
@@ -386,7 +386,7 @@ export function Layout() {
               </NavItem>
             ))}
           </Links>
-          <NavCta href="https://foxlight.ai/products/skulk">Get Skulk</NavCta>
+          <NavCta href="https://foxlight.ai/products/skulk">Get Skulk™</NavCta>
         </Pill>
       </Floater>
       <Main>

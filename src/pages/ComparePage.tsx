@@ -147,7 +147,7 @@ export function ComparePage() {
   if (baseline.data && candidate.data) {
     if (baseline.data.topologyLabel !== candidate.data.topologyLabel) guards.push('node set differs');
     if (baseline.data.cacheClass !== candidate.data.cacheClass) guards.push('cache warmth differs');
-    if (baseline.data.skulkVersion !== candidate.data.skulkVersion) guards.push('Skulk version differs');
+    if (baseline.data.skulkVersion !== candidate.data.skulkVersion) guards.push('Skulk™ version differs');
     if (!baseline.data.hasFingerprint || !candidate.data.hasFingerprint) guards.push('missing fingerprint');
   }
 
@@ -158,7 +158,7 @@ export function ComparePage() {
       <Sub>
         Pick a baseline and a candidate run to see per-model decode-throughput deltas. Positive is
         faster. The guards below warn when the two runs are not truly comparable (different node set,
-        cache warmth, or Skulk version) so a delta is never read out of context.
+        cache warmth, or Skulk™ version) so a delta is never read out of context.
       </Sub>
 
       <Pickers>

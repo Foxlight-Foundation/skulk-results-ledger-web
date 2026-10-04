@@ -128,7 +128,7 @@ export function ModelPage() {
     },
     {
       key: 'version',
-      header: 'Skulk',
+      header: 'Skulk™',
       render: (t) => (t.skulkVersion ? <Muted>{t.skulkVersion}</Muted> : <Muted>—</Muted>),
     },
     {

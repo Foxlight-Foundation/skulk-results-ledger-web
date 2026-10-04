@@ -295,8 +295,8 @@ export function ExplorerPage() {
   return (
     <Page>
       <Hero>
-        <Eyebrow>Skulk results ledger</Eyebrow>
-        <Title>Skulk performance.</Title>
+        <Eyebrow>Skulk™ results ledger</Eyebrow>
+        <Title>Skulk™ performance.</Title>
         <Sub>
           Every benchmark run across the Foxlight fleet. Throughput is the median of valid samples
           only. Click any point or row for the full run behind it.
@@ -318,7 +318,7 @@ export function ExplorerPage() {
         </Stat>
         <Stat>
           <StatNum>{periodStats.versionCount}</StatNum>
-          <StatLabel>Skulk versions</StatLabel>
+          <StatLabel>Skulk™ versions</StatLabel>
         </Stat>
       </Stats>
 
