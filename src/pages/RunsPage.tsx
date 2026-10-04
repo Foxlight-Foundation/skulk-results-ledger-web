@@ -129,7 +129,7 @@ export function RunsPage() {
     },
     {
       key: 'version',
-      header: 'Skulk',
+      header: 'Skulk™',
       render: (r) => (r.skulkVersion ? <Muted>{r.skulkVersion}</Muted> : <Muted>—</Muted>),
     },
     {

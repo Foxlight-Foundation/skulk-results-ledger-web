@@ -51,7 +51,7 @@ export function MethodologyPage() {
       <Eyebrow>How to read this</Eyebrow>
       <Title>Methodology</Title>
       <Lead>
-        These numbers come from the Skulk test harness running chat, code, and tool workloads
+        These numbers come from the Skulk™ test harness running chat, code, and tool workloads
         against real hardware. Every hardware-attributed run is included.
       </Lead>
 
@@ -64,7 +64,7 @@ export function MethodologyPage() {
         median and counted separately, so they can never set a record.
       </P>
       <P>
-        When Skulk reports a native decode rate we use it. When it does not (some engines only expose
+        When Skulk™ reports a native decode rate we use it. When it does not (some engines only expose
         a wall-clock figure that folds in prompt time) we fall back to wall throughput and mark the
         number as an estimate. We never silently mix the two.
       </P>
@@ -76,7 +76,7 @@ export function MethodologyPage() {
 
       <H2>Why comparisons carry warnings</H2>
       <P>
-        A faster number on a different node set, a warmer cache, or a newer Skulk version is not a
+        A faster number on a different node set, a warmer cache, or a newer Skulk™ version is not a
         real speedup. The compare view surfaces those differences as guards instead of hiding them.
       </P>
 
