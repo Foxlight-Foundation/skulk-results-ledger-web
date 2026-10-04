@@ -373,7 +373,7 @@ export function Layout() {
           <BrandGroup>
             <Brand href="https://foxlight.ai" aria-label="FoxlightAI home">
               <FoxlightMark height={34} />
-              FoxlightAI®
+              FoxlightAI™
             </Brand>
             <SectionChip to="/" end>
               Benchmarks
@@ -398,7 +398,7 @@ export function Layout() {
       <FooterWrapper>
         <FooterTop>
           <FoxlightMark width={34} height={34} />
-          <FooterBrand>FoxlightAI®</FooterBrand>
+          <FooterBrand>FoxlightAI™</FooterBrand>
         </FooterTop>
         <Columns>
           {FOOTER_COLUMNS.map((col) => (
@@ -425,7 +425,7 @@ export function Layout() {
           ))}
         </Columns>
         <FooterBottom>
-          <Copy>© 2026 FoxlightAI®, Inc.</Copy>
+          <Copy>© 2026 FoxlightAI™, Inc.</Copy>
           <Copy>
             An honest results ledger for the Skulk distributed-inference fabric. Every number links
             to its raw run.
