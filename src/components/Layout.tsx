@@ -425,10 +425,9 @@ export function Layout() {
           ))}
         </Columns>
         <FooterBottom>
-          <Copy>© 2026 FoxlightAI™, Inc.</Copy>
+          <Copy>© 2026 FoxlightAI Inc.</Copy>
           <Copy>
-            An honest results ledger for the Skulk distributed-inference fabric. Every number links
-            to its raw run.
+            FoxlightAI, Skulk, the Foxlight logo, and the Skulk logo are trademarks of FoxlightAI Inc.
           </Copy>
         </FooterBottom>
       </FooterWrapper>
