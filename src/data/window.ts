@@ -27,9 +27,13 @@ import { hasFullyKnownHardware } from './hardware';
 /** A selected window in days, or `null` for all-time. */
 export type TimeWindow = 7 | 14 | 30 | 90 | null;
 
-/** The default window: recent enough to reflect current code/fleet, wide
- * enough that most model cells still have samples. */
-export const DEFAULT_WINDOW: TimeWindow = 30;
+/** The default window: all time. Until runs land on a near-daily cadence,
+ * any dated default eventually presents an empty ledger to a fresh visitor
+ * (the 30d default showed zero runs once the newest run aged past a month).
+ * The dated windows remain one click away for currency checks, and every
+ * number still carries its run dates, so an all-time landing stays honest
+ * about how recent its data is. Changed 2026-11-11. */
+export const DEFAULT_WINDOW: TimeWindow = null;
 
 /** Segmented-control options in display order. */
 export const WINDOW_OPTIONS: { value: TimeWindow; label: string }[] = [
